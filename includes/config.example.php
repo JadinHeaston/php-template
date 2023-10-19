@@ -1,4 +1,7 @@
 <?PHP
+DEFINE('DEBUG', false);
+DEFINE('DISABLE_ERROR_EMAILS', false);
+
 //Database
 define('DB_HOST', 'localhost');
 define('DB_USERNAME', '');

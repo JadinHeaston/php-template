@@ -1,10 +1,12 @@
 <?PHP
 
+namespace jbh;
+
 class DatabaseConnector
 {
 	protected \PDO $connection;
 	protected $type;
-	public \PDOStatement $stmt; //\PDOStatement
+	public \PDOStatement $stmt;
 
 	public function __construct(string $host, int $port, string $db, string $user, string $pass, string $type, string $charset = 'utf8mb4', bool|NULL $trustCertificate = NULL)
 	{
@@ -36,12 +38,12 @@ class DatabaseConnector
 				$dsn .= ';TrustServerCertificate=' . strval(intval($trustCertificate));
 
 			//Attempting connection.
-			$this->connection = new PDO($dsn, $user, $pass);
-			$this->connection->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_WARNING);
-			$this->connection->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-			$this->connection->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+			$this->connection = new \PDO($dsn, $user, $pass);
+			$this->connection->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_WARNING);
+			$this->connection->setAttribute(\PDO::ATTR_EMULATE_PREPARES, false);
+			$this->connection->setAttribute(\PDO::ATTR_DEFAULT_FETCH_MODE, \PDO::FETCH_ASSOC);
 		}
-		catch (PDOException $e)
+		catch (\PDOException $e)
 		{
 			exit($e->getMessage());
 		}
@@ -49,48 +51,48 @@ class DatabaseConnector
 		return $this->connection;
 	}
 
-	public function executeStatement($query = '', $params = [])
+	public function executeStatement(string $query, $params = [])
 	{
 		try
 		{
 			$this->stmt = $this->connection->prepare($query);
 
 			if ($this->stmt === false)
-				throw new Exception('Unable to do prepared statement: ' . $query);
+				throw new \Exception('Unable to do prepared statement: ' . $query);
 
 			$this->stmt->execute($params);
 			return $this->stmt;
 		}
-		catch (Exception $e)
+		catch (\Exception $e)
 		{
-			throw new Exception($e->getMessage());
+			throw new \Exception($e->getMessage());
 		}
 	}
 
-	public function select($query = '', $params = [])
+	public function select(string $query, $params = [])
 	{
 		try
 		{
 			$this->stmt = $this->executeStatement($query, $params);
 			return $this->stmt->fetchAll();
 		}
-		catch (Exception $e)
+		catch (\Exception $e)
 		{
-			throw new Exception($e->getMessage());
+			throw new \Exception($e->getMessage());
 		}
 		return false;
 	}
 
-	public function update($query = '', $params = [])
+	public function update(string $query, $params = [])
 	{
 		try
 		{
 			$this->stmt = $this->executeStatement($query, $params);
 			return $this->stmt->rowCount();
 		}
-		catch (Exception $e)
+		catch (\Exception $e)
 		{
-			throw new Exception($e->getMessage());
+			throw new \Exception($e->getMessage());
 		}
 		return false;
 	}
@@ -112,9 +114,9 @@ class DatabaseConnector
 			$this->stmt = $this->executeStatement($query);
 			return $this->stmt->fetchAll();
 		}
-		catch (Exception $e)
+		catch (\Exception $e)
 		{
-			throw new Exception($e->getMessage());
+			throw new \Exception($e->getMessage());
 		}
 		return false;
 	}
@@ -135,9 +137,9 @@ class DatabaseConnector
 			$this->stmt = $this->executeStatement($query, array($table));
 			return $this->stmt->fetchAll();
 		}
-		catch (Exception $e)
+		catch (\Exception $e)
 		{
-			throw new Exception($e->getMessage());
+			throw new \Exception($e->getMessage());
 		}
 		return false;
 	}
@@ -154,13 +156,12 @@ class DatabaseConnector
 			$this->stmt = $this->executeStatement($query, array($table));
 			return $this->stmt->fetchAll();
 		}
-		catch (Exception $e)
+		catch (\Exception $e)
 		{
-			throw new Exception($e->getMessage());
+			throw new \Exception($e->getMessage());
 		}
 		return false;
 	}
-
 
 	public function getTableCreation(string $table)
 	{
@@ -174,14 +175,87 @@ class DatabaseConnector
 			$this->stmt = $this->executeStatement($query, array($table));
 			return $this->stmt->fetchAll();
 		}
-		catch (Exception $e)
+		catch (\Exception $e)
 		{
-			throw new Exception($e->getMessage());
+			throw new \Exception($e->getMessage());
 		}
 		return false;
 	}
-}
 
+	/**
+	 * Returns the final output query string that is internally constructed by the PDO.
+	 *
+	 * @param string $string
+	 * @param array $array
+	 * @return string
+	 */
+	public function debugBuildQuery(string $string, $array = [])
+	{
+		//Get the key lengths for each of the array elements.
+		$keys = array_map('strlen', array_keys($array));
+
+		//Sort the array by string length so the longest strings are replaced first.
+		array_multisort($keys, SORT_DESC, $array);
+
+		foreach ($array as $k => $v)
+		{
+			//Quote non-numeric values.
+			$replacement = is_numeric($v) ? $v : "'{$v}'";
+
+			//Replace the needle.
+			$string = str_replace($k, $replacement, $string);
+		}
+
+		return $string;
+	}
+
+	/**
+	 * Initiates a transaction
+	 *
+	 * Pass-through method: `PDO::beginTransaction()`
+	 * @return bool TRUE on success or FALSE on failure.
+	 * @throws PDOException If there is already a transaction started or the driver does not support transactions Note: An exception is raised even when the PDO::ATTR_ERRMODE attribute is not PDO::ERRMODE_EXCEPTION.
+	 */
+	public function beginTransaction()
+	{
+		return $this->connection->beginTransaction();
+	}
+
+	/**
+	 * Commits a transaction
+	 *
+	 * Pass-through method: `PDO::commit()`
+	 * @return bool TRUE on success or FALSE on failure.
+	 * @throws PDOException if there is no active transaction.
+	 */
+	public function commit()
+	{
+		return $this->connection->commit();
+	}
+
+	/**
+	 * Checks if inside a transaction
+	 *
+	 * Pass-through method: `PDO::inTransaction()`
+	 * @return bool TRUE if a transaction is currently active, and FALSE if not.
+	 */
+	public function inTransaction()
+	{
+		return $this->connection->inTransaction();
+	}
+
+	/**
+	 * Rolls back a transaction
+	 *
+	 * Pass-through method: `PDO::rollBack()`
+	 * @return bool TRUE on success or FALSE on failure.
+	 * @throws PDOException if there is no active transaction.
+	 */
+	public function rollBack()
+	{
+		return $this->connection->rollBack();
+	}
+}
 
 class CIS extends DatabaseConnector
 {
@@ -259,4 +333,325 @@ class Mailer
 	// private function checkEmailSentStatus()
 	// {
 	// }
+}
+
+class Table
+{
+	public TableRows $rows;
+
+	public function newTable(TableColumns $columns)
+	{
+		$this->rows = new TableRows($columns);
+	}
+
+	/**
+	 * Returns array of rows
+	 *
+	 * @return Array<row>
+	 */
+	public function getRows()
+	{
+		return $this->rows->getRows();
+	}
+
+	public function importData(array $data, bool $overwrite = false)
+	{
+		if ($overwrite === true)
+			$this->rows->clearData();
+		if ($data === false)
+			return false;
+		foreach ($data as $row)
+		{
+			$this->rows->addRow(new Row($row));
+		}
+
+		return true;
+	}
+
+	public function listColumns(bool $fullyQualifiedName = false)
+	{
+		return $this->rows->listColumns($fullyQualifiedName);
+	}
+
+	public function getColumns()
+	{
+		return $this->rows->getColumns();
+	}
+
+	public function getColumn(string $name)
+	{
+		return $this->rows->getColumn($name);
+	}
+
+	/**
+	 * Returns HTML of the inputs.
+	 *
+	 * @return string
+	 */
+	public function displayInputs()
+	{
+		$output = '';
+		$columns = $this->getColumns();
+
+		$type = array(
+			'bool' => 'select',
+			'email' => 'email',
+			'int' => 'number',
+			'json' => 'text',
+			'phone' => 'number',
+			'string' => 'text',
+		);
+		$first = $this->getRows()[0];
+		foreach ($first->values as $key => $value)
+		{
+			//Getting any label styles.
+			if (isset($columns[$key]->labelStyles))
+			{
+				$labelStyles = '';
+				foreach ($columns[$key]->labelStyles as $style => $styleValue)
+				{
+					$labelStyles = $style . ':' . $styleValue . ';';
+				}
+			}
+			//Creating wrapper label.
+			$output .= '<label for="' . $key . '"' . (isset($labelStyles) ? ' style="' . $labelStyles . '"' : '') . '>' . ucwords(str_replace('_', ' ', $key));
+			//Getting any input styles.
+			if (isset($columns[$key]->inputStyles))
+			{
+				$inputStyles = '';
+				foreach ($columns[$key]->inputStyles as $style => $styleValue)
+				{
+					$inputStyles = $style . ':' . $styleValue . ';';
+				}
+			}
+			//Creating select input.
+			if (isset($columns[$key]->inputType) && strtolower($columns[$key]->inputType) === 'select')
+			{
+				//Select options.
+				if (isset($columns[$key]->inputSelectOptions))
+				{
+					$output .= '<select class="select2" name="' . $key . (isset($columns[$key]->inputSelectOptions['Multiple']) ? '[]' : '') . '"' . (isset($columns[$key]->inputSelectOptions['Multiple']) ? ' multiple=' . $columns[$key]->inputSelectOptions['Multiple'] : '') . (isset($inputStyles) ? ' style="' . $inputStyles . '"' : '') . (isset($columns[$key]->inputSelectOptions['Allow New']) ? ' data-tags=' . $columns[$key]->inputSelectOptions['Allow New'] : '') . ' type="select">';
+					foreach ($columns[$key]->inputSelectOptions as $name => $selectOption)
+					{
+						if ($name === 'Possible Values')
+						{
+							foreach ($selectOption as $valueName => $possibleValue) //Creating values.
+							{
+								if (!isset($selectedValue) && isset($columns[$key]->inputSelectOptions['Selected Values']) && sizeof($columns[$key]->inputSelectOptions['Selected Values']) > 0)
+									$selectedValues = $columns[$key]->inputSelectOptions['Selected Values'];
+								elseif ($columns[$key]->type === 'int')
+									$selectedValues[] = intval($value);
+								else
+									$selectedValues[] = $value;
+
+								$output .=  '<option value="' .  $possibleValue . '" ' . (in_array($possibleValue, $selectedValues) ? 'selected' : '') . '>' . $valueName . '</option>';
+							}
+						}
+					}
+				}
+				else
+					$output .= '<select class="select2" name="' . $key . '" type="select">';
+				$output .= '</select>';
+			}
+			else //Creating standard input.
+				$output .= '<input id="' . $key . '" name="' . $key . '"' . (isset($inputStyles) ? ' style="' . $inputStyles . '"' : '') . ' type="' . $type[$columns[$key]->type] . '" value="' .  $value . '" checked>';
+			$output .= '</label>';
+		}
+
+		return $output;
+	}
+}
+
+/**
+ * Columns pull the most amount of work.
+ */
+class TableColumns
+{
+	public array $columns = array();
+
+	public function __construct(Column ...$columns)
+	{
+		foreach ($columns as $column)
+		{
+			$this->columns[$column->name] = $column;
+		}
+	}
+
+	public function addColumn(Column $column)
+	{
+		$this->columns[$column->name] = $column;
+		return true;
+	}
+
+	public function listColumns(bool $fullyQualifiedName = false)
+	{
+		$columnsNames = array();
+
+		foreach ($this->getColumns() as $column)
+		{
+			$columnsNames[] = $column->getFullColumnName($fullyQualifiedName);
+		}
+
+		return $columnsNames;
+	}
+
+	/**
+	 * Returns array of columns
+	 *
+	 * @return Array<Column>
+	 */
+	public function getColumns()
+	{
+		return $this->columns;
+	}
+
+	public function getColumn(string $name)
+	{
+		if (isset($this->columns[$name]))
+			return $this->columns[$name];
+		else
+			return false;
+	}
+
+	public function importData(array $data)
+	{
+		foreach ($data as $row)
+		{
+			foreach ($this->getColumns() as $columns)
+			{
+				$this->columns[$columns->name]->addValue($row, $columns->name);
+			}
+		}
+
+		return true;
+	}
+}
+
+/**
+ * Rows store the actual data. Each row is made up of X number of columns.
+ */
+class TableRows
+{
+	public TableColumns $columns;
+	public array $rows = array();
+
+	public function __construct(TableColumns $columns)
+	{
+		$this->initializateColumns($columns);
+	}
+
+	public function addRow(row $row)
+	{
+		$this->rows[] = $row;
+	}
+
+	/**
+	 * Returns array of rows
+	 *
+	 * @return Array<row>
+	 */
+	public function getRows()
+	{
+		return $this->rows;
+	}
+
+	private function initializateColumns(TableColumns $columns)
+	{
+		$this->columns = $columns;
+	}
+
+
+	public function listColumns(bool $fullyQualifiedName = false)
+	{
+		return $this->columns->listColumns($fullyQualifiedName);
+	}
+
+	public function getColumns()
+	{
+		return $this->columns->getColumns();
+	}
+
+	public function getColumn(string $name)
+	{
+		return $this->columns->getColumn($name);
+	}
+
+	public function clearData()
+	{
+		$this->rows = array();
+		return true;
+	}
+}
+
+/**
+ * Contains information for creating an HTML input.
+ */
+class Column
+{
+	public string $name;
+	/**
+	 * Valid types: bool | email | int | json | phone | string
+	 *
+	 * @var string
+	 */
+	public string $type;
+	public string $table;
+	public ?array $labelStyles;
+	public ?string $inputType;
+	public ?array $inputStyles;
+	public array $inputSelectOptions;
+
+	public function __construct(string $columnName, string $type, string $table, array $options = array())
+	{
+		$this->name = $columnName;
+		$this->type = $type;
+		$this->table = $table;
+		foreach ($options as $key => $option)
+		{
+			if ($key === 'Input Type')
+				$this->inputType = $option;
+			elseif ($key === 'Input Styles')
+				$this->inputStyles = $option;
+			elseif ($key === 'Label Styles')
+				$this->labelStyles = $option;
+			elseif ($key === 'Select Options')
+				$this->inputSelectOptions = $option;
+		}
+	}
+
+	public function getFullColumnName(bool $fullyQualifiedName = false)
+	{
+		if ($this->table === '' || $fullyQualifiedName === false)
+			return $this->name;
+		else
+			return $this->table . '.' . $this->name;
+	}
+}
+
+/**
+ * Simple row class.
+ */
+class Row
+{
+	public array $values = array();
+
+	/**
+	 * Providing an array will push each element of the array onto the variable stack.
+	 *
+	 * @param mixed $value
+	 */
+	public function __construct(array $data)
+	{
+		$this->values = $data;
+	}
+
+	public function getValues()
+	{
+		return $this->values;
+	}
+
+	public function addValue(mixed $data)
+	{
+		$this->values[] = $data;
+	}
 }
