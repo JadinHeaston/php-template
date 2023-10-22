@@ -1,3 +1,41 @@
+:root {
+	--background-color: #919596;
+	--second-level-background-color: #aaabac;
+	--font-color: black;
+	--main-height: 90vh;
+	--default-transition-duration: 300ms;
+}
+
+
+
+* {
+	box-sizing: border-box;
+}
+
+input[type="submit"] {
+	cursor: pointer;
+}
+
+/* Chrome, Safari, Edge, Opera */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+	appearance: textfield;
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+/* Firefox */
+input[type=number] {
+	appearance: textfield;
+	-moz-appearance: textfield;
+}
+
+label.required::after {
+	content: " *";
+	color: #e32;
+	vertical-align: middle;
+}
+
 .no-text-select {
 	/* iOS Safari */
 	-webkit-touch-callout: none;
@@ -12,10 +50,3 @@
 	/* Non-prefixed version, currently supported by Chrome, Edge, Opera and Firefox */
 	user-select: none;
 }
-
-label.required::after {
-	content: " *";
-	color: #e32;
-	vertical-align: middle;
-}
-

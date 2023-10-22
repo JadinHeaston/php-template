@@ -368,9 +368,9 @@ class Table
 		return true;
 	}
 
-	public function listColumns(bool $fullyQualifiedName = false)
+	public function listColumns(bool $fullyQualifiedName = false, bool $includeSpecialColumns = true)
 	{
-		return $this->rows->listColumns($fullyQualifiedName);
+		return $this->rows->listColumns($fullyQualifiedName, $includeSpecialColumns);
 	}
 
 	public function getColumns()
@@ -483,13 +483,13 @@ class TableColumns
 		return true;
 	}
 
-	public function listColumns(bool $fullyQualifiedName = false)
+	public function listColumns(bool $fullyQualifiedName = false, bool $includeSpecialColumns = true)
 	{
 		$columnsNames = array();
 
 		foreach ($this->getColumns() as $column)
 		{
-			$columnsNames[] = $column->getFullColumnName($fullyQualifiedName);
+			$columnsNames[] = (isset($column->specialColumn) && $column->specialColumn !== null && $includeSpecialColumns ? $column->specialColumn . ' as ' . $column->getFullColumnName(false) : $column->getFullColumnName($fullyQualifiedName));
 		}
 
 		return $columnsNames;
@@ -505,10 +505,16 @@ class TableColumns
 		return $this->columns;
 	}
 
-	public function getColumn(string $name)
+	/**
+	 * Undocumented function
+	 *
+	 * @param string $columnName
+	 * @return Column
+	 */
+	public function getColumn(string $columnName)
 	{
-		if (isset($this->columns[$name]))
-			return $this->columns[$name];
+		if (isset($this->columns[$columnName]))
+			return $this->columns[$columnName];
 		else
 			return false;
 	}
@@ -528,7 +534,7 @@ class TableColumns
 }
 
 /**
- * Rows store the actual data. Each row is made up of X number of columns.
+ * Rows store the actual data. Each row is made up of X number if columns 
  */
 class TableRows
 {
@@ -561,9 +567,9 @@ class TableRows
 	}
 
 
-	public function listColumns(bool $fullyQualifiedName = false)
+	public function listColumns(bool $fullyQualifiedName = false, bool $includeSpecialColumns = true)
 	{
-		return $this->columns->listColumns($fullyQualifiedName);
+		return $this->columns->listColumns($fullyQualifiedName, $includeSpecialColumns);
 	}
 
 	public function getColumns()
@@ -600,6 +606,7 @@ class Column
 	public ?string $inputType;
 	public ?array $inputStyles;
 	public array $inputSelectOptions;
+	public ?string $specialColumn;
 
 	public function __construct(string $columnName, string $type, string $table, array $options = array())
 	{
@@ -616,6 +623,8 @@ class Column
 				$this->labelStyles = $option;
 			elseif ($key === 'Select Options')
 				$this->inputSelectOptions = $option;
+			elseif ($key === 'Special Column')
+				$this->specialColumn = $option;
 		}
 	}
 
