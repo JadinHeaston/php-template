@@ -4,7 +4,6 @@
 		"target": "ES6", //Defining what version of JavaScript to compile to. ("esnext") <-- The latest.
 		"strict": true, //Defines how strict Typescript is about typing. (true)
 		"strictNullChecks": false,
-		"watch": true,
 		"lib": [
 			"dom",
 			"ES6"
