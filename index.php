@@ -35,8 +35,8 @@ $table->connection = new jbh\RaveConnector(DB_HOST, DB_PORT, DB_DATABASE, DB_USE
 
 if (!isset($_SESSION['Department']))
 {
-	$_SESSION['Department'] = call_API('GET', API_ROOT . '/division/', ['code' => 2320]);
-	// $_SESSION['Department'] = call_API('GET', API_ROOT . '/division/', array('code' => intval($_SESSION['AdfsUserDetails']->attributes['DivisionID'][0])));
+	$_SESSION['Department'] = callAPI('GET', API_ROOT . '/division/', ['code' => 2320]);
+	// $_SESSION['Department'] = callAPI('GET', API_ROOT . '/division/', array('code' => intval($_SESSION['AdfsUserDetails']->attributes['DivisionID'][0])));
 	if ($_SESSION['Department'] === false)
 		exit(1);
 	else

@@ -24,7 +24,7 @@ require_once('includes/loader.php');
 
 if (!isset($_SESSION['Department']))
 {
-	$_SESSION['Department'] = call_API('GET', 'https://phpapps.edge.gocolumbiamo.com/api/employee-directory/v1/divisions/', array('code' => 2320)); //intval($_SESSION['AdfsUserDetails']->attributes['DivisionID'][0])
+	$_SESSION['Department'] = callAPI('GET', 'https://phpapps.edge.gocolumbiamo.com/api/employee-directory/v1/divisions/', array('code' => 2320)); //intval($_SESSION['AdfsUserDetails']->attributes['DivisionID'][0])
 	if ($_SESSION['Department'] === false)
 		exit(1);
 	else
