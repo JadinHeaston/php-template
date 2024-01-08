@@ -1,0 +1,3 @@
+[submodule "php-adfs"]
+	path = php-adfs
+	url = root@sourcecontrol.edge.gocolumbiamo.com:Applications/php-adfs.git

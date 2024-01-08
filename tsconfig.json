@@ -1,0 +1,20 @@
+{
+	"compilerOptions": {
+		"module": "ES6",
+		"target": "ES6", //Defining what version of JavaScript to compile to. ("esnext") <-- The latest.
+		"strict": true, //Defines how strict Typescript is about typing. (true)
+		"strictNullChecks": false,
+		"watch": true,
+		"lib": [
+			"dom",
+			"ES6"
+		], //Automatically include typing for certain environments. (["dom", "ES2017"])
+		"baseUrl": "/",
+		"alwaysStrict": true,
+		"removeComments": true,
+		"moduleResolution": "Node",
+	},
+	"include": [
+		"./**/*.ts"
+	],
+}

@@ -8,3 +8,9 @@ define('DB_TYPE', 'sqlsrv');
 define('DB_PORT', 1433);
 define('DB_TRUST_CERT', 1);
 define('DB_CHARSET', 'utf8mb4');
+
+//RAVE SFTP Information
+DEFINE('RAVE_SFTP_HOST', '');
+DEFINE('RAVE_SFTP_PORT', 22);
+DEFINE('RAVE_SFTP_USERNAME', '');
+DEFINE('RAVE_SFTP_PASSWORD', '');

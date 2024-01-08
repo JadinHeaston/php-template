@@ -1,1 +1,15 @@
 <?PHP
+DEFINE('ADMINISTRATOR_ONLY_ROLES', array(
+	6,
+	10
+));
+
+DEFINE('TABLE_ASSOCIATIONS', array(
+	
+));
+
+DEFINE('API_PROTOCOL', 'https://');
+DEFINE('API_DOMAIN', 'api.como.gov');
+DEFINE('API_APPLICATION', 'employee-directory');
+DEFINE('API_VERSION', 'v1');
+DEFINE('API_ROOT', API_PROTOCOL . API_DOMAIN . '/' . API_APPLICATION . '/' . API_VERSION);
