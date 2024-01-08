@@ -82,7 +82,7 @@ class DatabaseConnector
 		return $this->connection;
 	}
 
-	public function executeStatement($query = '', $params = [])
+	public function executeStatement(string $query, $params = [])
 	{
 		try
 		{
@@ -100,7 +100,7 @@ class DatabaseConnector
 		}
 	}
 
-	public function select($query = '', $params = [])
+	public function select(string $query, $params = [])
 	{
 		try
 		{
@@ -114,7 +114,7 @@ class DatabaseConnector
 		return false;
 	}
 
-	public function update($query = '', $params = [])
+	public function update(string $query, $params = [])
 	{
 		try
 		{

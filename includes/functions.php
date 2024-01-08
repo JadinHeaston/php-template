@@ -2,36 +2,45 @@
 
 use jbh\RaveTable;
 
-function call_API(string $type, string $url, array $parameters = array())
+/**
+ * Converts a number of seconds into a human readable format.
+ *
+ * @param integer $seconds
+ * @return string
+ */
+function secondsToHumanTime(int $seconds)
 {
-	// Initialize a CURL session.
-	$ch = curl_init();
-	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); //Allowing self-signed certificates.
+	if ($seconds >= 86400)
+		$format[] = '%a day' . ($seconds > 86400 * 2 ? 's' : '');
+	if ($seconds >= 3600)
+		$format[] = '%h hour' . ($seconds > 3600 * 2 ? 's' : '');
+	if ($seconds >= 60)
+		$format[] = '%i minute' . ($seconds > 60 * 2 ? 's' : '');
+	$format[] = '%s ' . ($seconds !== 1 ? 'seconds' : 'second');
 
-	$query = http_build_query($parameters);
+	$dateHandle = new DateTime('@0');
+	return str_replace(' 1 seconds', ' 1 second', $dateHandle->diff(new DateTime("@$seconds"))->format(implode(', ', $format)));
+}
 
+function callAPI(string $type, string $url, array $parameters = array())
+{
+	$type = strtoupper($type);
 	if ($type === 'GET')
-		$url = $url . '?' . $query;
-	elseif ($type === 'POST')
+		$url = $url . '?' . http_build_query($parameters);
+
+	$curlHandle = curl_init($url);
+
+	if ($type === 'POST')
 	{
-		curl_setopt($ch, CURLOPT_POST, true);
-		curl_setopt(
-			$ch,
-			CURLOPT_POSTFIELDS,
-			$query
-		);
+		curl_setopt($curlHandle, CURLOPT_POST, 1);
+		curl_setopt($curlHandle, CURLOPT_POSTFIELDS, json_encode($parameters));
 	}
-	else
-		return false;
 
-	// Return Page contents.
-	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-
-	//grab URL and pass it to the variable.
-	curl_setopt($ch, CURLOPT_URL, $url);
-
-	var_dump($url);
-	return curl_exec($ch);
+	curl_setopt($curlHandle, CURLOPT_HTTPHEADER, ['Content-Type:application/json']);
+	curl_setopt($curlHandle, CURLOPT_RETURNTRANSFER, true);
+	$response = curl_exec($curlHandle);
+	curl_close($curlHandle);
+	return $response;
 }
 
 //Fill this function out with the process for updating the row.
