@@ -1,14 +1,42 @@
 <?PHP
 
-namespace jbh;
+namespace Models;
 
 class DatabaseConnector
 {
 	protected \PDO $connection;
-	protected $type;
-	public \PDOStatement $stmt;
+	protected string $type;
+	public ?Cache\DatabaseConnector $cacheConnector;
 
-	public function __construct(string $host, int $port, string $db, string $user, string $pass, string $type, string $charset = 'utf8mb4', bool|NULL $trustCertificate = NULL)
+	private $queries = array(
+		'listTables' => array(
+			'mysql' => 'SHOW FULL tables',
+			'sqlite' => 'SELECT * FROM sqlite_schema WHERE type =\'table\' AND name NOT LIKE \'sqlite_%\'',
+			'sqlsrv' => 'SELECT DISTINCT TABLE_NAME FROM information_schema.tables'
+		),
+		'getTableInformation' => array(
+			'mysql' => 'DESCRIBE ?',
+			'sqlite' => 'PRAGMA table_info(?)',
+			'sqlsrv' => 'SELECT * FROM information_schema.columns WHERE TABLE_NAME = ? order by ORDINAL_POSITION'
+		),
+		'getTableIndexes' => array(
+			'mysql' => 'SHOW INDEX FROM ?',
+			'sqlite' => 'SELECT * FROM sqlite_master WHERE type = \'index\' AND tbl_name = ?',
+			'sqlsrv' => 'SELECT * FROM sys.indexes WHERE object_id = (SELECT object_id FROM sys.objects WHERE name = ?)'
+		),
+		'getTableCreation' => array(
+			'mysql' => 'SHOW CREATE TABLE ?',
+			'sqlite' => 'SELECT sql FROM sqlite_schema WHERE name = ?',
+			'sqlsrv' => false //Not available without a stored procedure.
+		),
+		'createTable' => array(
+			'mysql' => 'CREATE TABLE IF NOT EXISTS ? ()',
+			'sqlite' => 'CREATE TABLE IF NOT EXISTS ? (column_name datatype, column_name datatype);',
+			'sqlsrv' => ''
+		)
+	);
+
+	public function __construct(string $type, string $hostPath, int $port = null, string $db = '', string $user = '', string $pass = '', string $charset = 'utf8mb4', bool|null $trustCertificate = null)
 	{
 		$this->type = strtolower(trim($type));
 		try
@@ -17,10 +45,12 @@ class DatabaseConnector
 			$dsn = $this->type;
 			if ($this->type === 'mysql')
 				$dsn .= ':host=';
+			elseif ($this->type === 'sqlite')
+				$dsn .= ':';
 			elseif ($this->type === 'sqlsrv')
 				$dsn .= ':Server=';
 
-			$dsn .= $host;
+			$dsn .= $hostPath;
 
 			if ($this->type === 'mysql')
 				$dsn .= ';port=' . strval($port);
@@ -34,7 +64,7 @@ class DatabaseConnector
 
 			if ($this->type === 'mysql')
 				$dsn .= ';charset=' . $charset;
-			if ($this->type === 'sqlsrv' && $trustCertificate !== NULL)
+			if ($this->type === 'sqlsrv' && $trustCertificate !== null)
 				$dsn .= ';TrustServerCertificate=' . strval(intval($trustCertificate));
 
 			//Attempting connection.
@@ -51,17 +81,41 @@ class DatabaseConnector
 		return $this->connection;
 	}
 
-	public function executeStatement(string $query, $params = [])
+	/**
+	 * Undocumented function
+	 *
+	 * @param string $filepath
+	 * @param array<\Cache\Table> $tables
+	 * @return void
+	 */
+	public function useCache(string $filepath, array $tables)
 	{
+		$this->cacheConnector = new Cache\DatabaseConnector('sqlite', $filepath);
+		$this->cacheConnector->tables = $tables;
+		$this->cacheConnector->createCacheTables();
+	}
+
+	public function executeStatement($query = '', $params = [], $skipPrepare = false)
+	{
+		if ($this->cacheConnector === null)
+			$connector = &$this;
+		else
+			$connector = &$this->cacheConnector;
+
 		try
 		{
-			$this->stmt = $this->connection->prepare($query);
+			if ($skipPrepare !== true)
+			{
+				$stmt = $connector->connection->prepare($query);
 
-			if ($this->stmt === false)
-				throw new \Exception('Unable to do prepared statement: ' . $query);
+				if ($stmt === false)
+					throw new \Exception('Unable to do prepared statement: ' . $query);
 
-			$this->stmt->execute($params);
-			return $this->stmt;
+				$stmt->execute($params);
+				return $stmt;
+			}
+			else
+				return $connector->connection->exec($query);
 		}
 		catch (\Exception $e)
 		{
@@ -69,12 +123,12 @@ class DatabaseConnector
 		}
 	}
 
-	public function select(string $query, $params = [])
+	public function select($query = '', $params = [])
 	{
 		try
 		{
-			$this->stmt = $this->executeStatement($query, $params);
-			return $this->stmt->fetchAll();
+			$stmt = $this->executeStatement($query, $params);
+			return $stmt->fetchAll();
 		}
 		catch (\Exception $e)
 		{
@@ -83,36 +137,12 @@ class DatabaseConnector
 		return false;
 	}
 
-	public function update(string $query, $params = [])
+	public function update($query = '', $params = [])
 	{
 		try
 		{
-			$this->stmt = $this->executeStatement($query, $params);
-			return $this->stmt->rowCount();
-		}
-		catch (\Exception $e)
-		{
-			throw new \Exception($e->getMessage());
-		}
-		return false;
-	}
-
-	public function listTables($includeViews = true)
-	{
-		if ($this->type === 'mysql')
-			$query = 'SHOW FULL tables';
-		elseif ($this->type === 'sqlsrv')
-			$query = 'SELECT DISTINCT TABLE_NAME FROM information_schema.tables';
-
-		if ($includeViews === false && $this->type === 'mysql')
-			$query .= ' WHERE Table_Type = \'BASE TABLE\'';
-		elseif ($includeViews === false && $this->type === 'sqlsrv')
-			$query .= ' WHERE TABLE_TYPE = \'BASE TABLE\'';
-
-		try
-		{
-			$this->stmt = $this->executeStatement($query);
-			return $this->stmt->fetchAll();
+			$stmt = $this->executeStatement($query, $params);
+			return $stmt->rowCount();
 		}
 		catch (\Exception $e)
 		{
@@ -126,16 +156,43 @@ class DatabaseConnector
 		return $this->connection->lastInsertId();
 	}
 
+	public function listTables($includeViews = true)
+	{
+		$query = $this->queries[__FUNCTION__][$this->type];
+		if ($query === false)
+			return false;
+
+		if ($includeViews === false && $this->type === 'mysql')
+			$query .= ' WHERE Table_Type = \'BASE TABLE\'';
+		elseif ($includeViews === false && $this->type === 'sqlsrv')
+			$query .= ' WHERE TABLE_TYPE = \'BASE TABLE\'';
+
+		try
+		{
+			$stmt = $this->executeStatement($query);
+			return $stmt->fetchAll();
+		}
+		catch (\Exception $e)
+		{
+			throw new \Exception($e->getMessage());
+		}
+		return false;
+	}
+
 	public function getTableInformation(string $table)
 	{
-		if ($this->type === 'mysql')
-			$query = 'DESCRIBE ?';
+		$query = $this->queries[__FUNCTION__][$this->type];
+		if ($query === false)
+			return false;
+
+		elseif ($this->type === 'sqlite')
+			$query = 'PRAGMA table_info(?)';
 		elseif ($this->type === 'sqlsrv')
 			$query = 'SELECT * FROM information_schema.columns WHERE TABLE_NAME = ? order by ORDINAL_POSITION';
 		try
 		{
-			$this->stmt = $this->executeStatement($query, array($table));
-			return $this->stmt->fetchAll();
+			$stmt = $this->executeStatement($query, array($table));
+			return $stmt->fetchAll();
 		}
 		catch (\Exception $e)
 		{
@@ -146,15 +203,14 @@ class DatabaseConnector
 
 	public function getTableIndexes(string $table)
 	{
-		if ($this->type === 'mysql')
-			$query = 'SHOW INDEX FROM ?';
-		elseif ($this->type === 'sqlsrv')
-			$query = 'SELECT * FROM sys.indexes WHERE object_id = (SELECT object_id FROM sys.objects WHERE name = ?)';
+		$query = $this->queries[__FUNCTION__][$this->type];
+		if ($query === false)
+			return false;
 
 		try
 		{
-			$this->stmt = $this->executeStatement($query, array($table));
-			return $this->stmt->fetchAll();
+			$stmt = $this->executeStatement($query, array($table));
+			return $stmt->fetchAll();
 		}
 		catch (\Exception $e)
 		{
@@ -165,15 +221,14 @@ class DatabaseConnector
 
 	public function getTableCreation(string $table)
 	{
-		if ($this->type === 'mysql')
-			$query = 'SHOW CREATE TABLE ?';
-		elseif ($this->type === 'sqlsrv')
-			return false; //Not available without a stored procedure.
+		$query = $this->queries[__FUNCTION__][$this->type];
+		if ($query === false)
+			return false;
 
 		try
 		{
-			$this->stmt = $this->executeStatement($query, array($table));
-			return $this->stmt->fetchAll();
+			$stmt = $this->executeStatement($query, array($table));
+			return $stmt->fetchAll();
 		}
 		catch (\Exception $e)
 		{
@@ -182,114 +237,35 @@ class DatabaseConnector
 		return false;
 	}
 
-	/**
-	 * Returns the final output query string that is internally constructed by the PDO.
-	 *
-	 * @param string $string
-	 * @param array $array
-	 * @return string
-	 */
-	public function debugBuildQuery(string $string, $array = [])
+	//$columns is expected to follow the structure below:
+	// [
+	// 	0 => array(
+	// 		'name' => '',
+	// 		'type' => '',
+	// 		'index' => false,
+	// 		'primary' => false,
+	// 		'null' => false,
+	// 		'default' => '', //Any type.
+	// 		'foreign_key' => array()
+	// 	),
+	// ]
+	public function createTable(string $tableName, array $columns)
 	{
-		//Get the key lengths for each of the array elements.
-		$keys = array_map('strlen', array_keys($array));
+		$query = $this->queries[__FUNCTION__][$this->type];
+		if ($query === false)
+			return false;
 
-		//Sort the array by string length so the longest strings are replaced first.
-		array_multisort($keys, SORT_DESC, $array);
-
-		foreach ($array as $k => $v)
+		try
 		{
-			//Quote non-numeric values.
-			$replacement = is_numeric($v) ? $v : "'{$v}'";
-
-			//Replace the needle.
-			$string = str_replace($k, $replacement, $string);
+			$stmt = $this->executeStatement($query, array($tableName,));
+			return $stmt->fetchAll();
+		}
+		catch (\Exception $e)
+		{
+			throw new \Exception($e->getMessage());
 		}
 
-		return $string;
-	}
-
-	/**
-	 * Initiates a transaction
-	 *
-	 * Pass-through method: `PDO::beginTransaction()`
-	 * @return bool TRUE on success or FALSE on failure.
-	 * @throws PDOException If there is already a transaction started or the driver does not support transactions Note: An exception is raised even when the PDO::ATTR_ERRMODE attribute is not PDO::ERRMODE_EXCEPTION.
-	 */
-	public function beginTransaction()
-	{
-		return $this->connection->beginTransaction();
-	}
-
-	/**
-	 * Commits a transaction
-	 *
-	 * Pass-through method: `PDO::commit()`
-	 * @return bool TRUE on success or FALSE on failure.
-	 * @throws PDOException if there is no active transaction.
-	 */
-	public function commit()
-	{
-		return $this->connection->commit();
-	}
-
-	/**
-	 * Checks if inside a transaction
-	 *
-	 * Pass-through method: `PDO::inTransaction()`
-	 * @return bool TRUE if a transaction is currently active, and FALSE if not.
-	 */
-	public function inTransaction()
-	{
-		return $this->connection->inTransaction();
-	}
-
-	/**
-	 * Rolls back a transaction
-	 *
-	 * Pass-through method: `PDO::rollBack()`
-	 * @return bool TRUE on success or FALSE on failure.
-	 * @throws PDOException if there is no active transaction.
-	 */
-	public function rollBack()
-	{
-		return $this->connection->rollBack();
-	}
-}
-
-class CIS extends DatabaseConnector
-{
-	/**
-	 * Returns all users.
-	 *
-	 * @return array|false
-	 */
-	public function getAllUsers(): array|false
-	{
-		return $this->select('SELECT * FROM users');
-	}
-
-	/**
-	 * Sets a users active status based on their employee ID.
-	 *
-	 * @param int employeeID
-	 * @param boolean $status
-	 * @return int|false Count of changed rows.
-	 */
-	public function setUserActiveState(int $employeeID, int $status): int|false
-	{
-		return $this->update('UPDATE users SET Active = ? WHERE EMPID = ?', [$status, $employeeID]);
-	}
-
-	/**
-	 * Retrieves all information for a given user based on their employee ID.
-	 *
-	 * @param integer $employeeID
-	 * @return array|false
-	 */
-	public function getUserInformation(int $employeeID): array|false
-	{
-		return $this->select('SELECT * FROM users WHERE EMPID = ?', [$employeeID]);
+		return false;
 	}
 }
 
@@ -334,6 +310,151 @@ class Mailer
 	// {
 	// }
 }
+
+namespace Models\Cache;
+
+class DatabaseConnector extends \Models\DatabaseConnector
+{
+	/** @var array<Table> */ 
+	public array $tables;
+
+	public function createCacheTables()
+	{
+		foreach ($this->tables as $table)
+		{
+			$this->executeStatement($table->generateCreateStatement());
+		}
+		// return;
+	}
+
+	public function importCSV(string $table, string $filepath, string $schema = 'main', $delimiter = ',')
+	{
+		function csv_read(string $filepath, string $delimiter = ',')
+		{
+			$header = [];
+			$row = 0;
+			# tip: dont do that every time calling csv_read(), pass handle as param instead ;)
+			$handle = fopen($filepath, "r");
+
+			if ($handle === false)
+				return false;
+
+			while (($data = fgetcsv($handle, 0, $delimiter)) !== false)
+			{
+
+				if (0 == $row)
+					$header = $data;
+				else
+					yield array_combine($header, $data); # on demand usage
+
+				++$row;
+			}
+			fclose($handle);
+			return true;
+			// Usage example:
+			// $generator = csv_read('file.csv');
+
+			// foreach ($generator as $item)
+			// {
+			//
+			// }
+		}
+
+		$generator = csv_read($filepath, $delimiter);
+
+		$this->truncateTable($table, $schema);
+		foreach ($generator as $item)
+		{
+			$this->executeStatement('INSERT INTO [' . $schema . '].[' . $table . '] (' . implode(', ', array_keys($item)) . ') VALUES(' . join(', ', array_fill(0, count($item),  '?')) . ')', array_values($item));
+		}
+		return true;
+	}
+
+	public function importQuery(string $table, \Models\DatabaseConnector $connection, string $selectQuery, string $schema = 'main')
+	{
+		$results = $connection->select($selectQuery);
+		if ($results === false)
+			return false;
+
+
+		$this->truncateTable($table, $schema);
+		foreach ($results as $row)
+		{
+			$this->executeStatement('INSERT INTO [' . $schema . '].[' . $table . '] (' . implode(', ', array_keys($row)) . ') VALUES(' . join(', ', array_fill(0, count($row),  '?')) . ')', array_values($row));
+		}
+	}
+
+	public function truncateTable($table, $schema = 'main')
+	{
+		$this->executeStatement('DELETE FROM [' . $schema . '].[' . $table . ']');
+	}
+}
+
+class Table
+{
+	public string $name;
+	public string $schema;
+	/** @var array<Column> */
+	public array $columns;
+	public array $constraints;
+	public bool $rowID = false;
+
+	public function __construct(string $name, string $schema = 'main', array $columns = [], array $constraints = [], bool $rowID = false)
+	{
+		$this->name = $name;
+		$this->schema = $schema;
+		$this->columns = $columns;
+		$this->constraints = $constraints;
+		$this->rowID = $rowID;
+	}
+
+	public function generateCreateStatement($overwrite = false)
+	{
+		$overwriteStatement = ($overwrite === false ? ' IF NOT EXISTS' : '');
+		$rowIDString = ($this->rowID === false ? ' WITHOUT ROWID' : '');
+		$columnStatements = [];
+
+		foreach ($this->columns as $column)
+		{
+			$columnStatements[] = $column->generateColumnStatement();
+		}
+		return 'CREATE TABLE' . $overwriteStatement . ' [' . $this->schema . '].[' . $this->name . '] (' . implode(', ', $columnStatements) . ')' . $rowIDString . ';';
+	}
+}
+
+class Column
+{
+	public string $name;
+	public string $type;
+	public bool $allowNull = false;
+	public bool $isPrimaryKey = false;
+	public bool $isIndex = false;
+	public ?string $foreignKey;
+	public ?string $default;
+
+	public function __construct(string $name, string $type, bool $allowNull = false, bool $isPrimaryKey = false, bool $isIndex = false, ?string $foreignKey = null, ?string $default = null)
+	{
+		$this->name = $name;
+		$this->type = $type;
+		$this->allowNull = $allowNull;
+		$this->isPrimaryKey = $isPrimaryKey;
+		$this->isIndex = $isIndex;
+		$this->foreignKey = $foreignKey;
+		$this->default = $default;
+	}
+
+	public function generateColumnStatement()
+	{
+		return $this->name . ' ' . $this->type . ($this->allowNull === true ? ' NULL' : ' NOT NULL') . ($this->isPrimaryKey === true ? ' PRIMARY KEY' : '') . ($this->foreignKey === null ? '' : ' REFERENCES [' . $this->foreignKey . '](' . $this->foreignKey . ')') . ($this->default === null ? '' : ' DEFAULT ' . $this->default);
+	}
+
+	public function generateIndexStatement()
+	{
+		return 'CREATE INDEX [ix_' . $this->name . '] ON [dbo].[' . $this->name . '] (' . $this->name . ');';
+	}
+}
+
+namespace Models\Table;
 
 class Table
 {
@@ -534,7 +655,7 @@ class TableColumns
 }
 
 /**
- * Rows store the actual data. Each row is made up of X number if columns 
+ * Rows store the actual data. Each row is made up of X number of columns 
  */
 class TableRows
 {

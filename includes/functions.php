@@ -59,3 +59,41 @@ function flatten(array $array)
 	});
 	return $return;
 }
+
+/**
+ * Caches a function result to a $GLOBALS['cache'] array.
+ * This is useful for queries that are run frequently in a single script and often request the same data.  
+ * The cache is stored in a global array and is keyed by the function and the parameters passed to the function.  
+ * It's important to note that the cache is only valid for the current script and changed data will not be reflected.
+ *
+ * @param callable $function
+ * @param mixed ...$params
+ * @return mixed
+ */
+function cachedFunction(callable $function, mixed ...$params)
+{
+	if (!isset($GLOBALS['cache'][$function][implode('', $params)]))
+		$GLOBALS['cache'][$function][implode('', $params)] = call_user_func($function, ...$params);
+
+	return $GLOBALS['cache'][$function][implode('', $params)];
+}
+
+function readCSVFile(string $filePath)
+{
+	$header = null;
+	$file = fopen($filePath, 'r');
+
+	while (($row = fgetcsv($file)) !== false)
+	{
+		if ($header === null) //First row is the header
+			$header = $row;
+		else //Subsequent rows are data
+		{
+
+			$rowData = array_combine($header, $row);
+			yield $rowData;
+		}
+	}
+
+	fclose($file);
+}
