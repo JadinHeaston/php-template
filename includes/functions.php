@@ -6,7 +6,7 @@
  * @param integer $seconds
  * @return string
  */
-function secondsToHumanTime(int $seconds)
+function secondsToHumanTime(int $seconds): string
 {
 	if ($seconds >= 86400)
 		$format[] = '%a day' . ($seconds > 86400 * 2 ? 's' : '');
@@ -42,7 +42,7 @@ function callAPI(string $type, string $url, array $parameters = array())
 }
 
 
-function rotate(array $array)
+function rotate(array $array): array
 {
 	array_unshift($array, null);
 	$array = call_user_func_array('array_map', $array);
@@ -50,7 +50,21 @@ function rotate(array $array)
 	return $array;
 }
 
-function flatten(array $array)
+function flattenSingleArrays(array $array): array
+{
+	foreach ($array as $key => &$value)
+	{
+		if (!is_array($value))
+			continue;
+		elseif (count($value) === 1)
+			$array[$key] = $value[0];
+		elseif (count($value) > 1)
+			$array[$key] = flattenSingleArrays($value);
+	}
+	return $array;
+}
+
+function flatten(array $array): array
 {
 	$return = array();
 	array_walk_recursive($array, function ($a) use (&$return)
@@ -70,7 +84,7 @@ function flatten(array $array)
  * @param mixed ...$params
  * @return mixed
  */
-function cachedFunction(callable $function, mixed ...$params)
+function cachedFunction(callable $function, mixed ...$params): mixed
 {
 	if (!isset($GLOBALS['cache'][$function][implode('', $params)]))
 		$GLOBALS['cache'][$function][implode('', $params)] = call_user_func($function, ...$params);

@@ -59,7 +59,7 @@ function errorHandler($severity, $message, $file, $line)
 		E_USER_DEPRECATED => 'User Deprecated',
 	];
 
-	$headers = "From:SecTrack-Bug@como.gov \r\n";
+	$headers = "From:email@example.com \r\n";
 	$headers .= "MIME-Version: 1.0\r\n";
 	$headers .= "Content-type: text/html\r\n";
 
