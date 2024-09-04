@@ -92,18 +92,19 @@ function cachedFunction(callable $function, mixed ...$params): mixed
 	return $GLOBALS['cache'][$function][implode('', $params)];
 }
 
-function readCSVFile(string $filePath)
+function readCSVFile(string $filePath, int $length = null, string $separator = ',', string $enclosure = '"', string $escape = '\\'): \Generator | false
 {
 	$header = null;
 	$file = fopen($filePath, 'r');
+	if ($file === false)
+		return false;
 
-	while (($row = fgetcsv($file)) !== false)
+	while (($row = fgetcsv($file, $length, $separator, $enclosure, $escape)) !== false)
 	{
 		if ($header === null) //First row is the header
 			$header = $row;
 		else //Subsequent rows are data
 		{
-
 			$rowData = array_combine($header, $row);
 			yield $rowData;
 		}
