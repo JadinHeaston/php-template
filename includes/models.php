@@ -1,12 +1,9 @@
 <?PHP
 
-namespace Models;
-
 class DatabaseConnector
 {
 	protected \PDO $connection;
 	protected string $type;
-	public ?Cache\DatabaseConnector $cacheConnector;
 
 	private $queries = array(
 		'listTables' => array(
@@ -81,32 +78,13 @@ class DatabaseConnector
 		return $this->connection;
 	}
 
-	/**
-	 * Undocumented function
-	 *
-	 * @param string $filepath
-	 * @param array<\Cache\Table> $tables
-	 * @return void
-	 */
-	public function useCache(string $filepath, array $tables)
-	{
-		$this->cacheConnector = new Cache\DatabaseConnector('sqlite', $filepath);
-		$this->cacheConnector->tables = $tables;
-		$this->cacheConnector->createCacheTables();
-	}
-
 	public function executeStatement($query = '', $params = [], $skipPrepare = false)
 	{
-		if ($this->cacheConnector === null)
-			$connector = &$this;
-		else
-			$connector = &$this->cacheConnector;
-
 		try
 		{
 			if ($skipPrepare !== true)
 			{
-				$stmt = $connector->connection->prepare($query);
+				$stmt = $this->connection->prepare($query);
 
 				if ($stmt === false)
 					throw new \Exception('Unable to do prepared statement: ' . $query);
@@ -115,7 +93,7 @@ class DatabaseConnector
 				return $stmt;
 			}
 			else
-				return $connector->connection->exec($query);
+				return $this->connection->exec($query);
 		}
 		catch (\Exception $e)
 		{
@@ -269,6 +247,43 @@ class DatabaseConnector
 	}
 }
 
+class AuditDB extends DatabaseConnector
+{
+	public function init()
+	{
+		$timer = new ScopeTimer('audit_db_init', false);
+		foreach (AUDIT_DB_TABLES as $tableStatement)
+		{
+			$this->executeStatement($tableStatement);
+		}
+		$this->executeStatement(
+			'CREATE TABLE IF NOT EXISTS debug_times (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+				action TEXT,
+				measured_time REAL
+			);'
+		);
+		$this->insertDebugTime('audit_db_init', $timer->getElapsedTime());
+		return true;
+	}
+
+	public function insertDebugTime(string $action, float $measuredTime)
+	{
+		if (AUDIT_DB_ENABLE_DEBUG_TIMES === false)
+			return false;
+		return $this->executeStatement('INSERT INTO debug_times (action, measured_time) VALUES (?, ?)', [$action, $measuredTime]);
+	}
+
+	public function insertEntry(int $userAgentID, int $employeeID, string $action)
+	{
+		$timer = new ScopeTimer('audit_db_insert', false);
+		$this->executeStatement('INSERT INTO log (user_agent_id, employee_id, action) VALUES (?, ?, ?)', [$userAgentID, $employeeID, $action]);
+		$this->insertDebugTime('audit_db_insert', $timer->getElapsedTime());
+		return true;
+	}
+}
+
 class Mailer
 {
 	public $senderEmail;
@@ -311,477 +326,333 @@ class Mailer
 	// }
 }
 
-namespace Models\Cache;
 
-class DatabaseConnector extends \Models\DatabaseConnector
+class LDAPWrapper
 {
-	/** @var array<Table> */ 
-	public array $tables;
+	private $ldapServer;
+	private $ldapUsername;
+	protected $ldapPassword;
+	private $ldapConnection;
 
-	public function createCacheTables()
+	public array $applicationGroups = array();
+
+	public function __construct($server = LDAP_SERVER, $username = LDAP_USERNAME, $password = LDAP_PASSWORD)
 	{
-		foreach ($this->tables as $table)
-		{
-			$this->executeStatement($table->generateCreateStatement());
-		}
-		// return;
+		$this->ldapServer = $server;
+		$this->ldapUsername = $username;
+		$this->ldapPassword = $password;
+		$this->connect();
 	}
 
-	public function importCSV(string $table, string $filepath, string $schema = 'main', $delimiter = ',')
+	public function __destruct()
 	{
-		function csv_read(string $filepath, string $delimiter = ',')
+		$this->disconnect();
+	}
+
+	private function connect()
+	{
+		$this->ldapConnection = ldap_connect($this->ldapServer);
+		if (!$this->ldapConnection)
+			throw new Exception('Failed to connect to LDAP server');
+
+		ldap_set_option($this->ldapConnection, LDAP_OPT_PROTOCOL_VERSION, 3);
+		ldap_set_option($this->ldapConnection, LDAP_OPT_REFERRALS, 0);
+
+		$bindResult = ldap_bind($this->ldapConnection, $this->ldapUsername, $this->ldapPassword);
+		if (!$bindResult)
+			throw new Exception('Failed to bind to LDAP server');
+	}
+
+	private function search(string $filter, array $attributes = [], string $baseDn = LDAP_BASE_DN)
+	{
+		if (!$this->ldapConnection)
+			throw new Exception('LDAP connection not established. Call connect() first.');
+
+		$searchResult = ldap_search($this->ldapConnection, $baseDn, $filter, $attributes);
+		if (!$searchResult)
+			throw new Exception('LDAP search failed');
+
+		$entries = ldap_get_entries($this->ldapConnection, $searchResult);
+		return $entries;
+	}
+
+	private function add(array $attributes = [], string $dn = LDAP_BASE_DN)
+	{
+		if (!$this->ldapConnection)
+			throw new Exception('LDAP connection not established. Call connect() first.');
+
+		$result = ldap_mod_add($this->ldapConnection, $dn, $attributes);
+		if (!$result)
+			throw new Exception('LDAP group addition failed');
+
+		return $result;
+	}
+
+	private function remove(array $attributes = [], string $dn = LDAP_BASE_DN)
+	{
+		if (!$this->ldapConnection)
 		{
-			$header = [];
-			$row = 0;
-			# tip: dont do that every time calling csv_read(), pass handle as param instead ;)
-			$handle = fopen($filepath, "r");
+			throw new Exception('LDAP connection not established. Call connect() first.');
+		}
 
-			if ($handle === false)
-				return false;
+		$result = ldap_mod_del($this->ldapConnection, $dn, $attributes);
+		if (!$result)
+		{
+			throw new Exception('LDAP group removal failed');
+		}
 
-			while (($data = fgetcsv($handle, 0, $delimiter)) !== false)
-			{
+		return $result;
+	}
 
-				if (0 == $row)
-					$header = $data;
-				else
-					yield array_combine($header, $data); # on demand usage
-
-				++$row;
-			}
-			fclose($handle);
+	public function add_member_to_group(string $networkID, string $groupDN)
+	{
+		$member = $this->get_member($networkID);
+		if ($member === false)
+			return false;
+		elseif ($this->group_exists($groupDN) === false) //Group not found.
+			return false;
+		elseif ($this->is_member_in_group($networkID, $groupDN) === true) //Member in group.
 			return true;
-			// Usage example:
-			// $generator = csv_read('file.csv');
 
-			// foreach ($generator as $item)
-			// {
-			//
-			// }
-		}
-
-		$generator = csv_read($filepath, $delimiter);
-
-		$this->truncateTable($table, $schema);
-		foreach ($generator as $item)
-		{
-			$this->executeStatement('INSERT INTO [' . $schema . '].[' . $table . '] (' . implode(', ', array_keys($item)) . ') VALUES(' . join(', ', array_fill(0, count($item),  '?')) . ')', array_values($item));
-		}
-		return true;
-	}
-
-	public function importQuery(string $table, \Models\DatabaseConnector $connection, string $selectQuery, string $schema = 'main')
-	{
-		$results = $connection->select($selectQuery);
-		if ($results === false)
-			return false;
-
-
-		$this->truncateTable($table, $schema);
-		foreach ($results as $row)
-		{
-			$this->executeStatement('INSERT INTO [' . $schema . '].[' . $table . '] (' . implode(', ', array_keys($row)) . ') VALUES(' . join(', ', array_fill(0, count($row),  '?')) . ')', array_values($row));
-		}
-	}
-
-	public function truncateTable($table, $schema = 'main')
-	{
-		$this->executeStatement('DELETE FROM [' . $schema . '].[' . $table . ']');
-	}
-}
-
-class Table
-{
-	public string $name;
-	public string $schema;
-	/** @var array<Column> */
-	public array $columns;
-	public array $constraints;
-	public bool $rowID = false;
-
-	public function __construct(string $name, string $schema = 'main', array $columns = [], array $constraints = [], bool $rowID = false)
-	{
-		$this->name = $name;
-		$this->schema = $schema;
-		$this->columns = $columns;
-		$this->constraints = $constraints;
-		$this->rowID = $rowID;
-	}
-
-	public function generateCreateStatement($overwrite = false)
-	{
-		$overwriteStatement = ($overwrite === false ? ' IF NOT EXISTS' : '');
-		$rowIDString = ($this->rowID === false ? ' WITHOUT ROWID' : '');
-		$columnStatements = [];
-
-		foreach ($this->columns as $column)
-		{
-			$columnStatements[] = $column->generateColumnStatement();
-		}
-		return 'CREATE TABLE' . $overwriteStatement . ' [' . $this->schema . '].[' . $this->name . '] (' . implode(', ', $columnStatements) . ')' . $rowIDString . ';';
-	}
-}
-
-class Column
-{
-	public string $name;
-	public string $type;
-	public bool $allowNull = false;
-	public bool $isPrimaryKey = false;
-	public bool $isIndex = false;
-	public ?string $foreignKey;
-	public ?string $default;
-
-	public function __construct(string $name, string $type, bool $allowNull = false, bool $isPrimaryKey = false, bool $isIndex = false, ?string $foreignKey = null, ?string $default = null)
-	{
-		$this->name = $name;
-		$this->type = $type;
-		$this->allowNull = $allowNull;
-		$this->isPrimaryKey = $isPrimaryKey;
-		$this->isIndex = $isIndex;
-		$this->foreignKey = $foreignKey;
-		$this->default = $default;
-	}
-
-	public function generateColumnStatement()
-	{
-		return $this->name . ' ' . $this->type . ($this->allowNull === true ? ' NULL' : ' NOT NULL') . ($this->isPrimaryKey === true ? ' PRIMARY KEY' : '') . ($this->foreignKey === null ? '' : ' REFERENCES [' . $this->foreignKey . '](' . $this->foreignKey . ')') . ($this->default === null ? '' : ' DEFAULT ' . $this->default);
-	}
-
-	public function generateIndexStatement()
-	{
-		return 'CREATE INDEX [ix_' . $this->name . '] ON [dbo].[' . $this->name . '] (' . $this->name . ');';
-	}
-}
-
-namespace Models\Table;
-
-class Table
-{
-	public TableRows $rows;
-
-	public function newTable(TableColumns $columns)
-	{
-		$this->rows = new TableRows($columns);
-	}
-
-	/**
-	 * Returns array of rows
-	 *
-	 * @return Array<row>
-	 */
-	public function getRows()
-	{
-		return $this->rows->getRows();
-	}
-
-	public function importData(array $data, bool $overwrite = false)
-	{
-		if ($overwrite === true)
-			$this->rows->clearData();
-		if ($data === false)
-			return false;
-		foreach ($data as $row)
-		{
-			$this->rows->addRow(new Row($row));
-		}
-
-		return true;
-	}
-
-	public function listColumns(bool $fullyQualifiedName = false, bool $includeSpecialColumns = true)
-	{
-		return $this->rows->listColumns($fullyQualifiedName, $includeSpecialColumns);
-	}
-
-	public function getColumns()
-	{
-		return $this->rows->getColumns();
-	}
-
-	public function getColumn(string $name)
-	{
-		return $this->rows->getColumn($name);
-	}
-
-	/**
-	 * Returns HTML of the inputs.
-	 *
-	 * @return string
-	 */
-	public function displayInputs()
-	{
-		$output = '';
-		$columns = $this->getColumns();
-
-		$type = array(
-			'bool' => 'select',
-			'email' => 'email',
-			'int' => 'number',
-			'json' => 'text',
-			'phone' => 'number',
-			'string' => 'text',
+		$attributes = array(
+			'member' => $member['Distinguished Name']
 		);
-		$first = $this->getRows()[0];
-		foreach ($first->values as $key => $value)
-		{
-			//Getting any label styles.
-			if (isset($columns[$key]->labelStyles))
-			{
-				$labelStyles = '';
-				foreach ($columns[$key]->labelStyles as $style => $styleValue)
-				{
-					$labelStyles = $style . ':' . $styleValue . ';';
-				}
-			}
-			//Creating wrapper label.
-			$output .= '<label for="' . $key . '"' . (isset($labelStyles) ? ' style="' . $labelStyles . '"' : '') . '>' . ucwords(str_replace('_', ' ', $key));
-			//Getting any input styles.
-			if (isset($columns[$key]->inputStyles))
-			{
-				$inputStyles = '';
-				foreach ($columns[$key]->inputStyles as $style => $styleValue)
-				{
-					$inputStyles = $style . ':' . $styleValue . ';';
-				}
-			}
-			//Creating select input.
-			if (isset($columns[$key]->inputType) && strtolower($columns[$key]->inputType) === 'select')
-			{
-				//Select options.
-				if (isset($columns[$key]->inputSelectOptions))
-				{
-					$output .= '<select class="select2" name="' . $key . (isset($columns[$key]->inputSelectOptions['Multiple']) ? '[]' : '') . '"' . (isset($columns[$key]->inputSelectOptions['Multiple']) ? ' multiple=' . $columns[$key]->inputSelectOptions['Multiple'] : '') . (isset($inputStyles) ? ' style="' . $inputStyles . '"' : '') . (isset($columns[$key]->inputSelectOptions['Allow New']) ? ' data-tags=' . $columns[$key]->inputSelectOptions['Allow New'] : '') . ' type="select">';
-					foreach ($columns[$key]->inputSelectOptions as $name => $selectOption)
-					{
-						if ($name === 'Possible Values')
-						{
-							foreach ($selectOption as $valueName => $possibleValue) //Creating values.
-							{
-								if (!isset($selectedValue) && isset($columns[$key]->inputSelectOptions['Selected Values']) && sizeof($columns[$key]->inputSelectOptions['Selected Values']) > 0)
-									$selectedValues = $columns[$key]->inputSelectOptions['Selected Values'];
-								elseif ($columns[$key]->type === 'int')
-									$selectedValues[] = intval($value);
-								else
-									$selectedValues[] = $value;
 
-								$output .=  '<option value="' .  $possibleValue . '" ' . (in_array($possibleValue, $selectedValues) ? 'selected' : '') . '>' . $valueName . '</option>';
-							}
-						}
-					}
-				}
-				else
-					$output .= '<select class="select2" name="' . $key . '" type="select">';
-				$output .= '</select>';
-			}
-			else //Creating standard input.
-				$output .= '<input id="' . $key . '" name="' . $key . '"' . (isset($inputStyles) ? ' style="' . $inputStyles . '"' : '') . ' type="' . $type[$columns[$key]->type] . '" value="' .  $value . '" checked>';
-			$output .= '</label>';
-		}
+		$this->add($attributes, $groupDN);
 
-		return $output;
-	}
-}
-
-/**
- * Columns pull the most amount of work.
- */
-class TableColumns
-{
-	public array $columns = array();
-
-	public function __construct(Column ...$columns)
-	{
-		foreach ($columns as $column)
-		{
-			$this->columns[$column->name] = $column;
-		}
-	}
-
-	public function addColumn(Column $column)
-	{
-		$this->columns[$column->name] = $column;
 		return true;
 	}
 
-	public function listColumns(bool $fullyQualifiedName = false, bool $includeSpecialColumns = true)
+	public function remove_member_from_group(string $networkID, string $groupDN)
 	{
-		$columnsNames = array();
+		$member = $this->get_member($networkID);
+		if ($member === false)
+			return false;
+		elseif ($this->group_exists($groupDN) === false) //Group not found.
+			return false;
+		elseif ($this->is_member_in_group($networkID, $groupDN) === false) //Member not in group.
+			return true;
 
-		foreach ($this->getColumns() as $column)
-		{
-			$columnsNames[] = (isset($column->specialColumn) && $column->specialColumn !== null && $includeSpecialColumns ? $column->specialColumn . ' as ' . $column->getFullColumnName(false) : $column->getFullColumnName($fullyQualifiedName));
-		}
+		$attributes = array(
+			'member' => $member['Distinguished Name']
+		);
 
-		return $columnsNames;
+		$this->remove($attributes, $groupDN);
+
+		return true;
 	}
 
-	/**
-	 * Returns array of columns
-	 *
-	 * @return Array<Column>
-	 */
-	public function getColumns()
+	private function group_exists(string $groupDN)
 	{
-		return $this->columns;
-	}
-
-	/**
-	 * Undocumented function
-	 *
-	 * @param string $columnName
-	 * @return Column
-	 */
-	public function getColumn(string $columnName)
-	{
-		if (isset($this->columns[$columnName]))
-			return $this->columns[$columnName];
+		//Verify the group is found.
+		$groupEntry = $this->search('(distinguishedName=' . $groupDN . ')');
+		if ($groupEntry['count'] === 1)
+			return true;
 		else
 			return false;
 	}
 
-	public function importData(array $data)
+	public function is_member_in_group(string $networkID, string $groupDN)
 	{
-		foreach ($data as $row)
+		//Verify the group is found.
+		$members = $this->search('(&(objectCategory=person)(objectClass=user)(sAMAccountName=' . $networkID . ')(memberOf=' . $groupDN . '))');
+
+		if ($members['count'] > 0)
+			return true;
+		else
+			return false;
+	}
+
+	public function parse_system_role(array $groups, string $system)
+	{
+		$match = array();
+		foreach ($groups as $group)
 		{
-			foreach ($this->getColumns() as $columns)
+			if (preg_match('/CN=(.*),.*' . $system  . '.*/u', $group, $match))
+				return $match[1];
+		}
+
+		return false;
+	}
+
+
+	public function update_attribute(string $dn, array $entry)
+	{
+		if (!$this->ldapConnection)
+			throw new Exception('LDAP connection not established. Call connect() first.');
+
+		$result = ldap_mod_replace_ext($this->ldapConnection, $dn, $entry);
+		if (!$result)
+			throw new Exception('LDAP attribute replacement failed');
+
+		$entries = ldap_get_entries($this->ldapConnection, $result);
+		return $entries;
+	}
+
+	public function get_member(string $networkID)
+	{
+		$attributes = array('cn', 'givenname', 'initials', 'Employee', 'info', 'memberof', 'department', 'employeenumber', 'badpwdcount', 'samaccountname', 'sn', 'mail', 'mobile', 'lockouttime', 'whencreated', 'whenchanged');
+		$value = $this->search('(&(objectCategory=person)(objectClass=user)(sAMAccountName=' . $networkID . '))', $attributes);
+		$this->recursive_unset_key($value, 'count');
+		foreach ($attributes as $attribute)
+		{
+			$this->recursive_unset_value($value, $attribute);
+			if (isset($value[$attribute]) && is_array($value[$attribute]) && count($value[$attribute]) === 1)
+				$value[$attribute] = $value[$attribute][0];
+		}
+		$value = $this->recursive_change_key($value, array('cn' => 'Common Name', 'department' => 'Division Code', 'displayname' => 'Full Name', 'dn' => 'Distinguished Name', 'employeenumber' => 'Employee ID', 'givenname' => 'First Name', 'initials' => 'Initials', 'mail' => 'Email', 'member' => 'Members', 'memberof' => 'Membership', 'mobile' => 'Mobile Phone', 'samaccountname' => 'Network ID', 'sn' => 'Last Name'));
+		$this->recursive_flatten_single_entry_array($value);
+		if (is_array($value) && count($value) > 0)
+			return $value[0];
+		else
+			return false;
+	}
+
+
+	private function recursive_flatten_single_entry_array(array &$array)
+	{
+		foreach ($array as &$value)
+		{
+			if (!is_array($value) || count($value) === 0)
+				continue;
+			elseif (count($value) > 1)
+				$this->recursive_flatten_single_entry_array($value);
+			else
+				$value = $value[0];
+		}
+
+		return $array;
+	}
+
+	public function get_application_members()
+	{
+		$attributes = array('member');
+		$result = $this->search('(&(objectclass=group)(cn=SecTrack_*))', $attributes);
+		$this->recursive_unset_key($result, 'count');
+		foreach ($attributes as $attribute)
+		{
+			$this->recursive_unset_value($result, $attribute);
+		}
+		$this->get_member_information($result);
+		$result = $this->recursive_change_key($result, array('department' => 'Division Code', 'displayname' => 'Full Name', 'dn' => 'Distinguished Name', 'employeenumber' => 'Employee ID',  'mail' => 'Email', 'member' => 'Members', 'memberof' => 'Membership', 'mobile' => 'Mobile Phone', 'samaccountname' => 'Network ID'));
+		set_role_group_as_key($result);
+		return $result;
+	}
+
+	private function get_member_information(array &$array)
+	{
+		function set_role_group_as_key(array &$array)
+		{
+			foreach ($array as $key => $value)
 			{
-				$this->columns[$columns->name]->addValue($row, $columns->name);
+				if (!isset($value['dn']))
+					continue;
+
+				$array[ldap_explode_dn($value['dn'], 1)[0]] = (isset($value['Members']) ? $value['Members'] : array());
+				unset($array[$key]);
 			}
 		}
 
-		return true;
-	}
-}
-
-/**
- * Rows store the actual data. Each row is made up of X number of columns 
- */
-class TableRows
-{
-	public TableColumns $columns;
-	public array $rows = array();
-
-	public function __construct(TableColumns $columns)
-	{
-		$this->initializateColumns($columns);
-	}
-
-	public function addRow(row $row)
-	{
-		$this->rows[] = $row;
-	}
-
-	/**
-	 * Returns array of rows
-	 *
-	 * @return Array<row>
-	 */
-	public function getRows()
-	{
-		return $this->rows;
-	}
-
-	private function initializateColumns(TableColumns $columns)
-	{
-		$this->columns = $columns;
-	}
-
-
-	public function listColumns(bool $fullyQualifiedName = false, bool $includeSpecialColumns = true)
-	{
-		return $this->columns->listColumns($fullyQualifiedName, $includeSpecialColumns);
-	}
-
-	public function getColumns()
-	{
-		return $this->columns->getColumns();
-	}
-
-	public function getColumn(string $name)
-	{
-		return $this->columns->getColumn($name);
-	}
-
-	public function clearData()
-	{
-		$this->rows = array();
-		return true;
-	}
-}
-
-/**
- * Contains information for creating an HTML input.
- */
-class Column
-{
-	public string $name;
-	/**
-	 * Valid types: bool | email | int | json | phone | string
-	 *
-	 * @var string
-	 */
-	public string $type;
-	public string $table;
-	public ?array $labelStyles;
-	public ?string $inputType;
-	public ?array $inputStyles;
-	public array $inputSelectOptions;
-	public ?string $specialColumn;
-
-	public function __construct(string $columnName, string $type, string $table, array $options = array())
-	{
-		$this->name = $columnName;
-		$this->type = $type;
-		$this->table = $table;
-		foreach ($options as $key => $option)
+		foreach ($array as &$entry)
 		{
-			if ($key === 'Input Type')
-				$this->inputType = $option;
-			elseif ($key === 'Input Styles')
-				$this->inputStyles = $option;
-			elseif ($key === 'Label Styles')
-				$this->labelStyles = $option;
-			elseif ($key === 'Select Options')
-				$this->inputSelectOptions = $option;
-			elseif ($key === 'Special Column')
-				$this->specialColumn = $option;
+			if (!isset($entry['member']))
+				continue;
+
+			foreach ($entry['member'] as &$value)
+			{
+				$value = $this->get_member($value);
+				$this->recursive_flatten_single_entry_array($value);
+			}
 		}
 	}
 
-	public function getFullColumnName(bool $fullyQualifiedName = false)
+	public function assign_user_to_group(string $networkID, string $group)
 	{
-		if ($this->table === '' || $fullyQualifiedName === false)
-			return $this->name;
-		else
-			return $this->table . '.' . $this->name;
+	}
+
+	private function recursive_unset_key(array &$array, mixed $unwantedKey)
+	{
+		unset($array[$unwantedKey]);
+		foreach ($array as &$value)
+		{
+			if (is_array($value))
+				$this->recursive_unset_key($value, $unwantedKey);
+		}
+	}
+
+	private function recursive_unset_value(array &$array, mixed $unwantedValue)
+	{
+		foreach ($array as $key => &$value)
+		{
+			if (is_array($value))
+				$this->recursive_unset_value($value, $unwantedValue);
+			else if ($value === $unwantedValue)
+				unset($array[$key]);
+		}
+	}
+
+	//$arr => original array
+	//$set => array containing old keys as keys and new keys as values
+	private function recursive_change_key(array $arr, array $set)
+	{
+		if (is_array($arr) && is_array($set))
+		{
+			$newArr = array();
+			foreach ($arr as $k => $v)
+			{
+				$key = array_key_exists($k, $set) ? $set[$k] : $k;
+				$newArr[$key] = is_array($v) ? $this->recursive_change_key($v, $set) : $v;
+			}
+			return $newArr;
+		}
+		return $arr;
+	}
+
+	// getAllDisabledUsers()
+	// {
+	// 	// !(userAccountControl:1.2.840.113556.1.4.803:=2)
+	// }
+
+	private function disconnect()
+	{
+		if ($this->ldapConnection)
+		{
+			ldap_unbind($this->ldapConnection);
+			$this->ldapConnection = null;
+		}
 	}
 }
 
-/**
- * Simple row class.
- */
-class Row
+class ScopeTimer
 {
-	public array $values = array();
+	public string $name;
+	public string|float $startTime;
+	public bool $showOnDestruct;
 
-	/**
-	 * Providing an array will push each element of the array onto the variable stack.
-	 *
-	 * @param mixed $value
-	 */
-	public function __construct(array $data)
+	public function __construct(string $name = 'Timer', bool $showOnDestruct = true)
 	{
-		$this->values = $data;
+		$this->startTime = microtime(true);
+		$this->name = $name;
+		$this->showOnDestruct = $showOnDestruct;
 	}
 
-	public function getValues()
+	public function __destruct()
 	{
-		return $this->values;
+		if ($this->showOnDestruct === false)
+			return;
+
+		echo $this->getDisplayTime();
 	}
 
-	public function addValue(mixed $data)
+	public function getDisplayTime(): string
 	{
-		$this->values[] = $data;
+		return $this->name . ': ' . $this->getElapsedTime() . ' Sec';
 	}
+
+	public function getElapsedTime(): string|float
+	{
+		return microtime(true) - $this->startTime;
+	}
+
+	//$timer = new ScopeTimer(__FILE__);
 }
