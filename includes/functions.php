@@ -142,3 +142,109 @@ function versionedFiles(array $filePaths, int $versionLength = 6, string $hash =
 	}
 	return $output;
 }
+
+function convertBoolStringToBool(string $value): bool
+{
+	return (strtolower(trim($value)) === 'true' ? true : false);
+}
+
+function runCommand(string $command): array | false
+{
+	// Prepare the descriptors for process communication
+	$descriptors = [
+		0 => ['pipe', 'r'], // stdin
+		1 => ['pipe', 'w'], // stdout
+		2 => ['pipe', 'w'] // stderr
+	];
+
+	// Open the process
+	$process = proc_open($command, $descriptors, $pipes);
+
+	if (is_resource($process))
+	{
+		// Close the stdin pipe (we don't need to write to it)
+		fclose($pipes[0]);
+
+		// Read from the stdout pipe
+		$stdout = stream_get_contents($pipes[1]);
+		fclose($pipes[1]);
+
+		// Read from the stderr pipe
+		$stderr = stream_get_contents($pipes[2]);
+		fclose($pipes[2]);
+
+		// Close the process
+		$returnValue = proc_close($process);
+
+		// Return the result
+		return [
+			'stdout' => $stdout,
+			'stderr' => $stderr,
+			'return_value' => $returnValue
+		];
+	}
+	else
+		return false;
+}
+
+function downloadArrayAsCSV(array $array, string $filename = 'output', string $delimiter = ',')
+{
+	// open raw memory as file so no temp files needed, you might run out of memory though
+	$file = fopen('php://memory', 'w');
+
+	//Create header line.
+	fputcsv($file, array_keys($array[0]), $delimiter);
+
+	// loop over the input array
+	foreach ($array as $line)
+	{
+		// generate csv lines from the inner arrays
+		fputcsv($file, $line, $delimiter);
+	}
+	// reset the file pointer to the start of the file
+	fseek($file, 0);
+	// tell the browser it's going to be a csv file
+	header('Content-Type: text/csv');
+	// tell the browser we want to save it instead of displaying it
+	header('Content-Disposition: attachment; filename="' . $filename . '.csv";');
+	// make php send the generated csv lines to the browser
+	fpassthru($file);
+}
+
+function outputFile(string $filePath, string $outputName, string $contentType = 'binary')
+{
+	if (!is_file($filePath))
+	{
+		http_response_code(404);
+		echo 'File not found.';
+		return false;
+	}
+	header('Content-Type: ' . $contentType);
+	header('Content-Transfer-Encoding: binary');
+	header('Content-Disposition: attachment; filename="' . $outputName . '";');
+	header('Content-Length: ' . filesize($filePath));
+
+	// Clear output buffer
+	if (ob_get_level())
+	{
+		ob_end_clean();
+	}
+
+	// Open file and stream content
+	$fp = fopen($filePath, 'rb');
+	if ($fp === false)
+	{
+		http_response_code(500);
+		echo 'Error opening file.';
+		return false;
+	}
+
+	// Output file content in chunks
+	while (!feof($fp))
+	{
+		echo fread($fp, 8192);
+		flush(); // Ensure content is sent to the browser immediately
+	}
+
+	fclose($fp);
+}
