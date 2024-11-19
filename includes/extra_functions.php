@@ -75,7 +75,7 @@ function flatten(array $array): array
 }
 
 /**
- * Caches a function result to a $GLOBALS['cache'] array.
+ * Caches a function result to a $GLOBALS['cached_function'] array.
  * This is useful for queries that are run frequently in a single script and often request the same data.  
  * The cache is stored in a global array and is keyed by the function and the parameters passed to the function.  
  * It's important to note that the cache is only valid for the current script and changed data will not be reflected.
@@ -86,10 +86,10 @@ function flatten(array $array): array
  */
 function cachedFunction(callable $function, mixed ...$params): mixed
 {
-	if (!isset($GLOBALS['cache'][$function][implode('', $params)]))
-		$GLOBALS['cache'][$function][implode('', $params)] = call_user_func($function, ...$params);
+	if (!isset($GLOBALS['cached_function'][$function][implode('', $params)]))
+		$GLOBALS['cached_function'][$function][implode('', $params)] = call_user_func($function, ...$params);
 
-	return $GLOBALS['cache'][$function][implode('', $params)];
+	return $GLOBALS['cached_function'][$function][implode('', $params)];
 }
 
 function readCSVFile(string $filePath, int $length = null, string $separator = ',', string $enclosure = '"', string $escape = '\\'): \Generator | false
