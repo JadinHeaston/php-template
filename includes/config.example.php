@@ -1,4 +1,4 @@
-<?PHP
+<?php
 define('APP_ROOT', '/');
 define('DEBUG', false);
 define('DISABLE_ERROR_EMAILS', false);

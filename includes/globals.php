@@ -1,4 +1,4 @@
-<?PHP
+<?php
 
 
 //Setting any configuration options.

@@ -1,4 +1,4 @@
-<?PHP
+<?php
 //Create version hashes based on last modified time.
 $versionedFiles = versionedFiles(
 	[
