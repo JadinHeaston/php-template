@@ -346,29 +346,3 @@ function rglob(string $pattern, int $flags = 0): array | false
 	}
 	return $files;
 }
-
-function downloadFile(string $filePath, string $mimeType, string $downloadName = null): bool
-{
-	// Check if the file exists
-	if (!file_exists($filePath))
-		return false;
-
-	// Get the file's information
-	$fileName = basename($filePath);  // Original file name
-	$fileSize = filesize($filePath);  // File size in bytes
-
-	// If a download name is provided, override the original file name
-	if ($downloadName)
-	{
-		$fileName = $downloadName;
-	}
-
-	// Set appropriate headers for downloading the file
-	header('Content-Type: ' . $mimeType);  // Set MIME type
-	header('Content-Disposition: attachment; filename="' . $fileName . '"');  // Prompt the user to download
-	header('Content-Length: ' . $fileSize);  // File size for the download
-
-	// Output the file to the browser
-	readfile($filePath);
-	return true;
-}
