@@ -326,7 +326,6 @@ class Mailer
 	// }
 }
 
-
 class LDAPWrapper
 {
 	private $ldapServer;
@@ -363,7 +362,7 @@ class LDAPWrapper
 			throw new Exception('Failed to bind to LDAP server');
 	}
 
-	private function search(string $filter, array $attributes = [], string $baseDn = LDAP_BASE_DN)
+	public function search(string $filter, array $attributes = [], string $baseDn = LDAP_BASE_DN)
 	{
 		if (!$this->ldapConnection)
 			throw new Exception('LDAP connection not established. Call connect() first.');
