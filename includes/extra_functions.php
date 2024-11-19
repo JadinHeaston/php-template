@@ -181,7 +181,7 @@ function downloadArrayAsCSV(array $array, string $filename = 'output', string $d
 	fpassthru($file);
 }
 
-function outputFile(string $filePath, string $outputName, string $contentType = 'binary')
+function outputFile(string $filePath, string $contentType = 'binary', string $outputName = null)
 {
 	if (!is_file($filePath))
 	{
@@ -189,6 +189,8 @@ function outputFile(string $filePath, string $outputName, string $contentType = 
 		echo 'File not found.';
 		return false;
 	}
+	if ($outputName === null)
+		$outputName = basename($filePath);
 	header('Content-Type: ' . $contentType);
 	header('Content-Transfer-Encoding: binary');
 	header('Content-Disposition: attachment; filename="' . $outputName . '";');
