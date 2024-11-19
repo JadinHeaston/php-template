@@ -247,43 +247,6 @@ class DatabaseConnector
 	}
 }
 
-class AuditDB extends DatabaseConnector
-{
-	public function init()
-	{
-		$timer = new ScopeTimer('audit_db_init', false);
-		foreach (AUDIT_DB_TABLES as $tableStatement)
-		{
-			$this->executeStatement($tableStatement);
-		}
-		$this->executeStatement(
-			'CREATE TABLE IF NOT EXISTS debug_times (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-				action TEXT,
-				measured_time REAL
-			);'
-		);
-		$this->insertDebugTime('audit_db_init', $timer->getElapsedTime());
-		return true;
-	}
-
-	public function insertDebugTime(string $action, float $measuredTime)
-	{
-		if (AUDIT_DB_ENABLE_DEBUG_TIMES === false)
-			return false;
-		return $this->executeStatement('INSERT INTO debug_times (action, measured_time) VALUES (?, ?)', [$action, $measuredTime]);
-	}
-
-	public function insertEntry(int $userAgentID, int $employeeID, string $action)
-	{
-		$timer = new ScopeTimer('audit_db_insert', false);
-		$this->executeStatement('INSERT INTO log (user_agent_id, employee_id, action) VALUES (?, ?, ?)', [$userAgentID, $employeeID, $action]);
-		$this->insertDebugTime('audit_db_insert', $timer->getElapsedTime());
-		return true;
-	}
-}
-
 class Mailer
 {
 	public $senderEmail;
