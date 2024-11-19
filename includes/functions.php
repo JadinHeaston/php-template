@@ -2,6 +2,8 @@
 
 function isHTMX()
 {
+	if (function_exists('getallheaders') === false)
+		return false;
 	$headers = getallheaders();
 	return ($headers !== false && isset($headers['Hx-Request']) && boolval($headers['Hx-Request']) === true);
 }
