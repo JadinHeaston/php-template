@@ -250,3 +250,157 @@ function outputFile(string $filePath, string $outputName, string $contentType = 
 
 	fclose($fp);
 }
+
+function restructureFilesArray(array $files): array
+{
+	$result = [];
+
+	foreach ($files as $key => $fileInfo)
+	{
+		// Check if the file input is an array (i.e., multiple files uploaded)
+		if (is_array($fileInfo['name']))
+		{
+			foreach ($fileInfo['name'] as $index => $name)
+			{
+				// Construct a sub-array for each file
+				$result[$key][] = [
+					'name' => $name,
+					'type' => $fileInfo['type'][$index],
+					'tmp_name' => $fileInfo['tmp_name'][$index],
+					'error' => $fileInfo['error'][$index],
+					'size' => $fileInfo['size'][$index]
+				];
+			}
+		}
+		else
+		{
+			// Single file upload case
+			$result[$key] = [
+				'name' => $fileInfo['name'],
+				'type' => $fileInfo['type'],
+				'tmp_name' => $fileInfo['tmp_name'],
+				'error' => $fileInfo['error'],
+				'size' => $fileInfo['size']
+			];
+		}
+	}
+
+	return $result;
+}
+
+function printCurrentMemory()
+{
+	return round((memory_get_usage() / 1024) / 1024, 3) . 'MB (' . round((memory_get_peak_usage() / 1024) / 1024, 3) . 'MB)';
+}
+
+function getWeekStartAndEnd(DateTime $date = new DateTime(), bool $startOnMonday = false): array
+{
+	// Clone the date to avoid modifying the original
+	$start = clone $date;
+	$end = clone $date;
+
+	// Get the day of the week (0 = Sunday, 6 = Saturday)
+	$dayOfWeek = intval($start->format('w'));
+
+	// Adjust the start of the week based on whether it should start on Monday
+	if ($startOnMonday)
+	{
+		// If the week starts on Monday, we shift the days
+		// Monday = 0, Sunday = 6
+		$start->modify('-' . (($dayOfWeek === 0) ? 6 : $dayOfWeek - 1) . ' days');
+	}
+	else
+	{
+		// If the week starts on Sunday, we leave it as is (Sunday = 0)
+		$start->modify('-' . $dayOfWeek . ' days');
+	}
+	$start->setTime(0, 0, 0);
+	$start->modify('+0 second'); // Ensure that the time is set to exactly 00:00:00.000
+
+	// Calculate the end of the week (Saturday)
+	if ($startOnMonday)
+	{
+		// If the week starts on Monday, the end is the next Sunday
+		$end->modify('+' . (7 - $dayOfWeek) . ' days');
+	}
+	else
+	{
+		// If the week starts on Sunday, the end is the next Saturday
+		$end->modify('+' . (6 - $dayOfWeek) . ' days');
+	}
+	$end->setTime(23, 59, 59);
+	$end->modify('+999 milliseconds'); // Add the last milliseconds
+
+	return [
+		'start' => $start,
+		'end' => $end,
+	];
+}
+
+function checkForFolder(string $folderPath): bool
+{
+	if (is_dir($folderPath) === false)
+	{
+		if (mkdir($folderPath, 0775, true) === false)
+		{
+			echo 'FAILURE: Directory exists as a file. Failed to create directory. Please delete the file and try again. Path: ' . $folderPath;
+			return false;
+		}
+	}
+
+	if (is_writable($folderPath) === false)
+	{
+		if (chmod($folderPath, 0775) === false)
+		{
+			echo 'FAILURE: Directory not writeable. Failed to update permissions. Please allow PHP to write to this directory. Path: ' . $folderPath;
+			return false;
+		}
+	}
+	return true;
+}
+
+/**
+ * Does not support flag GLOB_BRACE
+ *
+ * @param string $pattern
+ * @param integer $flags
+ * @return array
+ */
+function rglob(string $pattern, int $flags = 0): array | false
+{
+	$files = glob($pattern, $flags);
+	foreach (glob(dirname($pattern) . '/*', GLOB_ONLYDIR | GLOB_NOSORT) as $dir)
+	{
+		$files = array_merge(
+			[],
+			...[$files, rglob($dir . "/" . basename($pattern), $flags)]
+		);
+	}
+	return $files;
+}
+
+function downloadFile(string $filePath, string $mimeType, string $downloadName = null): bool
+{
+	// Check if the file exists
+	if (!file_exists($filePath))
+		return false;
+
+	// Get the file's information
+	$fileName = basename($filePath);  // Original file name
+	$fileSize = filesize($filePath);  // File size in bytes
+
+	// If a download name is provided, override the original file name
+	if ($downloadName)
+	{
+		$fileName = $downloadName;
+	}
+
+	// Set appropriate headers for downloading the file
+	header('Content-Type: ' . $mimeType);  // Set MIME type
+	header('Content-Disposition: attachment; filename="' . $fileName . '"');  // Prompt the user to download
+	header('Content-Length: ' . $fileSize);  // File size for the download
+
+	// Output the file to the browser
+	readfile($filePath);
+	return true;
+}
