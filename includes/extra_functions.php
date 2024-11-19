@@ -337,11 +337,11 @@ function checkForFolder(string $folderPath): bool
 function rglob(string $pattern, int $flags = 0): array | false
 {
 	$files = glob($pattern, $flags);
-	foreach (glob(dirname($pattern) . '/*', GLOB_ONLYDIR | GLOB_NOSORT) as $dir)
+	foreach (glob(dirname($pattern) . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR | GLOB_NOSORT) as $dir)
 	{
 		$files = array_merge(
 			[],
-			...[$files, rglob($dir . "/" . basename($pattern), $flags)]
+			...[$files, rglob($dir . DIRECTORY_SEPARATOR . basename($pattern), $flags)]
 		);
 	}
 	return $files;
