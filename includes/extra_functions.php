@@ -348,3 +348,57 @@ function rglob(string $pattern, int $flags = 0): array | false
 	}
 	return $files;
 }
+
+function requirePHPFilesRecursive(array $directories): void
+{
+	foreach ($directories as $directory)
+	{
+		// Check if the directory exists and is a directory
+		if (is_dir($directory) === false)
+			continue;
+
+		// Use glob to find all PHP files recursively in the directory
+		$PHPFiles = glob($directory . '/**/*.php', GLOB_BRACE);
+
+		// Loop through the PHP files and include them using require_once
+		foreach ($PHPFiles as $PHPFile)
+		{
+			require_once($PHPFile);
+		}
+	}
+}
+
+/**
+ * Generates a UUIDv4
+ *
+ * @return string
+ */
+function uuidv4(): string
+{
+	$data = random_bytes(16);
+
+	$data[6] = chr(ord($data[6]) & 0x0f | 0x40); // set version to 0100
+	$data[8] = chr(ord($data[8]) & 0x3f | 0x80); // set bits 6-7 to 10
+
+	return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+}
+
+function deleteDirectory(string $directory): bool
+{
+	if (!file_exists($directory))
+		return true;
+
+	if (!is_dir($directory))
+		return unlink($directory);
+
+	foreach (scandir($directory) as $item)
+	{
+		if ($item == '.' || $item == '..')
+			continue;
+
+		if (!deleteDirectory($directory . DIRECTORY_SEPARATOR . $item))
+			return false;
+	}
+
+	return rmdir($directory);
+}
