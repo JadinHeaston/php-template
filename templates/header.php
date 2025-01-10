@@ -8,6 +8,11 @@ $versionedFiles = versionedFiles(
 	]
 );
 
+$jsDiv = '';
+if (REQUIRE_JAVASCRIPT === true)
+	$jsDiv = <<<HTML
+		<div id="no-js">JavaScript is required for this site to function properly.</div>
+		HTML;
 
 echo <<<HTML
 	<!DOCTYPE html>
@@ -22,10 +27,34 @@ echo <<<HTML
 		<link rel="stylesheet" href="{$GLOBALS['constants']['APP_ROOT']}css/styles.css?v={$versionedFiles[__DIR__ . '/../css/styles.css']['version']}" integrity="{$versionedFiles[__DIR__ . '/../css/styles.css']['integrity']}">
 		<script src="{$GLOBALS['constants']['APP_ROOT']}js/scripts.js.js?v={$versionedFiles[__DIR__ . '/../js/scripts.js']['version']}" type="module" integrity="{$versionedFiles[__DIR__ . '/../js/scripts.js']['integrity']}"></script>
 		<script src="{$GLOBALS['constants']['APP_ROOT']}vendor/htmx.min.js?v={$versionedFiles[__DIR__ . '/../vendor/htmx.min.js']['version']}" integrity="{$versionedFiles[__DIR__ . '/../vendor/htmx.min.js']['integrity']}"></script>
+		
+		<style>
+			#no-js {
+				display: none !important;
+			}
+		</style>
+		<noscript>
+			<style>
+				#no-js {
+					display: revert !important;
+					position: absolute;
+					top: 0;
+					left: 0;
+					width: 100%;
+					height: 100%;
+					background: white;
+					z-index: 1000;
+					font-size: 1.5rem;
+					font-weight: bold;
+					text-align: center;
+					color: black;
+				}
+			</style>
+		</noscript>
 	</head>
 
 	<body>
-
+		
 		<header>
 			Header Content!
 	HTML;
