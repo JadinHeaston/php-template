@@ -374,3 +374,10 @@ function addBusinessDays(DateTime $date, int $daysToAdd, array $holidays = []): 
 	}
 	return $date;
 }
+
+function fileLog(string $name, string $debugFilePath = 'debug.txt',  mixed ...$logInput): void
+{
+	$debug = fopen($debugFilePath, "a");
+	fwrite($debug, $name . ': ' . json_encode($logInput, JSON_PRETTY_PRINT) . PHP_EOL);
+	fclose($debug);
+}
