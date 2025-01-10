@@ -381,3 +381,32 @@ function fileLog(string $name, string $debugFilePath = 'debug.txt',  mixed ...$l
 	fwrite($debug, $name . ': ' . json_encode($logInput, JSON_PRETTY_PRINT) . PHP_EOL);
 	fclose($debug);
 }
+
+function capitalizeWords(string $string, string $wordSeperators = " \t\r\n\f\v/"): string
+{
+	define('capitalizeWords_COMMON_ACRONYMS', [
+		//Filetypes
+		'PDF',
+		'HTML',
+		'JS',
+		'PHP',
+		//Medical
+		'AIDS',
+		'HIV',
+		'STI',
+		'STD'
+	]);
+
+	$string = ucwords(strtolower($string), $wordSeperators);
+	$string = str_replace(' And ', ' and ', $string);
+	$string = str_replace(' Of ', ' of ', $string);
+
+	foreach (capitalizeWords_COMMON_ACRONYMS as $acronym)
+	{
+		$string = preg_replace_callback('/(.*(?:^|\s|\/))(' . strtolower($acronym) . ')((?:$|\s|\/).*)/i', function (array $matches): string
+		{
+			return $matches[1] . strtoupper($matches[2]) . $matches[3];
+		}, $string);
+	}
+	return $string;
+}
