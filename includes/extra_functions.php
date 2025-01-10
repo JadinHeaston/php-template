@@ -348,3 +348,29 @@ function rglob(string $pattern, int $flags = 0): array | false
 	}
 	return $files;
 }
+
+/**
+ * Adds days until enough business days are accounted for.
+ *
+ * @param DateTime $date
+ * @param integer $daysToAdd
+ * @param array<DateTime> $holidays
+ * @return DateTime
+ */
+function addBusinessDays(DateTime $date, int $daysToAdd, array $holidays = []): DateTime
+{
+	// Loop until we have added the correct number of business days
+	while ($daysToAdd > 0)
+	{
+		// Add 1 day to the current date
+		$date->modify('+1 day');
+
+		// Check if the new date is a weekend (Saturday or Sunday)
+		// 'N' returns 1 for Monday, 7 for Sunday
+		if ($date->format('N') < 6)
+		{
+			--$daysToAdd;  // Decrement the daysToAdd only if it's a business day
+		}
+	}
+	return $date;
+}
