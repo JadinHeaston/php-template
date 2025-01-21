@@ -464,3 +464,43 @@ function capitalizeWords(string $string, string $wordSeperators = " \t\r\n\f\v/"
 	}
 	return $string;
 }
+
+function convertTextualPhoneNumber(string $phoneNumber): string
+{
+	// Mapping of letters to phone digits (standard telephone keypad mapping)
+	$letterToDigit = [
+		['A' => 2, 'B' => 2, 'C' => 2],
+		['D' => 3, 'E' => 3, 'F' => 3],
+		['G' => 4, 'H' => 4, 'I' => 4],
+		['J' => 5, 'K' => 5, 'L' => 5],
+		['M' => 6, 'N' => 6, 'O' => 6],
+		['P' => 7, 'Q' => 7, 'R' => 7, 'S' => 7],
+		['T' => 8, 'U' => 8, 'V' => 8],
+		['W' => 9, 'X' => 9, 'Y' => 9, 'Z' => 9],
+	];
+
+	// Convert the phone number string
+	$phoneNumber = strtoupper($phoneNumber); // Ensure we are working with uppercase letters
+	$convertedNumber = '';
+
+	//Iterating through phone number characters
+	$phoneNumberLength = strlen($phoneNumber);
+	for ($i = 0; $i < $phoneNumberLength; ++$i)
+	{
+		$character = $phoneNumber[$i];
+		$letterToDigitCheck = false;
+		foreach ($letterToDigit as $letterToDigitSection)
+		{
+			if (isset($letterToDigitSection[$character]) === false)
+				continue;
+
+			$convertedNumber .= $letterToDigitSection[$character]; // Replace letter with corresponding digit
+			$letterToDigitCheck = true;
+		}
+
+		if ($letterToDigitCheck === false)
+			$convertedNumber .= $character; // Keep non-letter characters (e.g., numbers, periods, etc.)
+	}
+
+	return $convertedNumber;
+}
