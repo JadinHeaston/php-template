@@ -245,6 +245,68 @@ class DatabaseConnector
 
 		return false;
 	}
+	
+	public function importCSVtoSQLite(string $csvPath, string $delimiter = ',', string $tableName = null, array $fields = null): array
+	{
+		if (($csv_handle = fopen($csvPath, 'r')) === FALSE)
+			throw new Exception('Failed to open CSV file.');
+
+		if ($tableName === null)
+			$tableName = preg_replace('/[^a-zA-Z0-9_]/i', '', basename(str_replace(' ', '_', $csvPath), '.csv'));
+
+		if ($fields === null)
+		{
+			$fields = array_map(function ($field)
+			{
+				return strtolower(preg_replace('/[^a-zA-Z0-9_]/i', '', str_replace(' ', '_', $field)));
+			}, fgetcsv($csv_handle, 0, $delimiter));
+
+			$fields = renameRepeatingValues($fields);
+		}
+
+		fclose($csv_handle);
+
+		$create_fields_str = join(', ', array_map(function ($field)
+		{
+			return '`' . $field . '` TEXT NULL';
+		}, $fields));
+
+		$this->connection->beginTransaction();
+
+		$create_table_sql = "CREATE TABLE IF NOT EXISTS {$tableName} ({$create_fields_str})";
+		$this->connection->exec($create_table_sql);
+
+		$insert_fields_str = join(', ', $fields);
+		if ($insert_fields_str === '')
+		{
+			$this->connection->rollBack();
+			return [];
+		}
+		$insert_values_str = join(', ', array_fill(0, count($fields),  '?'));
+		$insertSQL = "INSERT INTO `{$tableName}` ({$insert_fields_str}) VALUES ({$insert_values_str})";
+		$insert_sth = $this->connection->prepare($insertSQL);
+
+		$inserted_rows = 0;
+		foreach (readCSVFile($csvPath, null, $delimiter) as $csvRow)
+		{
+			if ($csvRow === false)
+				break;
+
+			// var_dump($fields, $insertSQL, $csvRow);
+
+			$insert_sth->execute(array_values($csvRow));
+			++$inserted_rows;
+		}
+
+		$this->connection->commit();
+
+		return array(
+			'table_name' => $tableName,
+			'fields' => $fields,
+			'insert' => $insert_sth,
+			'inserted_rows' => $inserted_rows
+		);
+	}
 }
 
 class Mailer
