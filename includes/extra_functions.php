@@ -157,7 +157,7 @@ function runCommand(string $command): array | false
 		return false;
 }
 
-function downloadArrayAsCSV(array $array, string $filename = 'output', string $delimiter = ',')
+function downloadArrayAsCSV(array $array, string $filename = 'output', string $delimiter = ','): void
 {
 	// open raw memory as file so no temp files needed, you might run out of memory though
 	$file = fopen('php://memory', 'w');
@@ -181,7 +181,7 @@ function downloadArrayAsCSV(array $array, string $filename = 'output', string $d
 	fpassthru($file);
 }
 
-function outputFile(string $filePath, string $contentType = 'binary', string $outputName = null)
+function outputFile(string $filePath, string $contentType = 'binary', string $outputName = null): false
 {
 	if (!is_file($filePath))
 	{
@@ -258,7 +258,7 @@ function restructureFilesArray(array $files): array
 	return $result;
 }
 
-function printCurrentMemory()
+function printCurrentMemory(): string
 {
 	return round((memory_get_usage() / 1024) / 1024, 3) . 'MB (' . round((memory_get_peak_usage() / 1024) / 1024, 3) . 'MB)';
 }
