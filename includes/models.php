@@ -33,7 +33,7 @@ class DatabaseConnector
 		)
 	);
 
-	public function __construct(string $type, string $hostPath, int $port = null, string $db = '', string $user = '', string $pass = '', string $charset = 'utf8mb4', bool|null $trustCertificate = null)
+	public function __construct(string $type, string $hostPath, ?int $port = null, string $db = '', string $user = '', string $pass = '', string $charset = 'utf8mb4', ?bool $trustCertificate = null)
 	{
 		$this->type = strtolower(trim($type));
 		try
@@ -246,7 +246,7 @@ class DatabaseConnector
 		return false;
 	}
 	
-	public function importCSVtoSQLite(string $csvPath, string $delimiter = ',', string $tableName = null, array $fields = null): array
+	public function importCSVtoSQLite(string $csvPath, string $delimiter = ',', ?string $tableName = null, ?array $fields = null): array
 	{
 		if (($csv_handle = fopen($csvPath, 'r')) === FALSE)
 			throw new Exception('Failed to open CSV file.');
