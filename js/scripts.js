@@ -1,7 +1,21 @@
-document.addEventListener("DOMContentLoaded", async function () {
-	initializeListeners();
-	initSelect2Inputs();
-});
+if (document.readyState !== "loading") {
+	setTimeout(onReady, 0);
+} else {
+	document.addEventListener("DOMContentLoaded", onReady);
+}
+
+async function onReady() {
+	// console.log(Date()); //*** DEBUGGING
+
+	//Contains small tweaks to help development. 
+	//NEEDS to be defined first.
+	developmentTweaks = false;
+
+	Promise.all([
+		initializeListeners(),
+		initSelect2Inputs()
+	]);
+}
 
 async function initializeListeners() {
 }
