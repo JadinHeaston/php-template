@@ -20,10 +20,10 @@ function secondsToHumanTime(int $seconds): string
 	return str_replace(' 1 seconds', ' 1 second', $dateHandle->diff(new DateTime("@$seconds"))->format(implode(', ', $format)));
 }
 
-function callAPI(string $type, string $url, array $parameters = array())
+function callAPI(string $type, string $url, string $userAgent, array $parameters = [], array $headers = [])
 {
 	$type = strtoupper($type);
-	if ($type === 'GET')
+	if ($type === 'GET' && count($parameters) > 0)
 		$url = $url . '?' . http_build_query($parameters);
 
 	$curlHandle = curl_init($url);
@@ -34,10 +34,13 @@ function callAPI(string $type, string $url, array $parameters = array())
 		curl_setopt($curlHandle, CURLOPT_POSTFIELDS, json_encode($parameters));
 	}
 
-	curl_setopt($curlHandle, CURLOPT_HTTPHEADER, ['Content-Type:application/json']);
+	curl_setopt($curlHandle, CURLOPT_HTTPHEADER, $headers);
 	curl_setopt($curlHandle, CURLOPT_RETURNTRANSFER, true);
+	curl_setopt($curlHandle, CURLOPT_USERAGENT, $userAgent);
 	$response = curl_exec($curlHandle);
 	curl_close($curlHandle);
+	if (isset($headers['Content-Type']) && $headers['Content-Type'] === 'application/json')
+		$response = json_decode($response, true);
 	return $response;
 }
 
