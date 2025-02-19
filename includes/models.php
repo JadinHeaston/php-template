@@ -311,11 +311,8 @@ class DatabaseConnector
 
 class Mailer
 {
-	public $senderEmail;
-
-	private function __construct(string $senderEmail)
+	public function __construct(public string $senderEmail)
 	{
-		$this->senderEmail = $senderEmail;
 	}
 
 	public function sendMail(array|string $destination, string $subject, string $message, array|string $carbonCopy = '', array|string $blindCarbonCopy = '', array $additionalHeaders = array())
