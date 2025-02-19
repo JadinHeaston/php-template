@@ -245,7 +245,7 @@ class DatabaseConnector
 
 		return false;
 	}
-	
+
 	public function importCSVtoSQLite(string $csvPath, string $delimiter = ',', ?string $tableName = null, ?array $fields = null): array
 	{
 		if (($csv_handle = fopen($csvPath, 'r')) === FALSE)
