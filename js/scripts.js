@@ -20,6 +20,18 @@ async function onReady() {
 async function initializeListeners() {
 }
 
+/***
+* Swaps in the body of error pages returned from htmx requests 
+*/
+document.addEventListener("htmx:beforeOnLoad", function (event) {
+	// @ts-ignore
+	const xhr = event.detail.xhr
+	if (xhr.status == 500 || xhr.status == 403 || xhr.status == 404) {
+		event.stopPropagation() // Tell htmx not to process these requests
+		document.children[0].innerHTML = xhr.response // Swap in body of response instead
+	}
+});
+
 document.addEventListener('htmx:beforeHistorySave', async function (event) {
 	destroySelect2();
 });
