@@ -1,15 +1,17 @@
+//Contains small tweaks to help development. 
+//NEEDS to be defined first.
+var developmentTweaks = false;
+
 if (document.readyState !== "loading") {
 	setTimeout(onReady, 0);
 } else {
 	document.addEventListener("DOMContentLoaded", onReady);
 }
 
-async function onReady() {
-	// console.log(Date()); //*** DEBUGGING
 
-	//Contains small tweaks to help development. 
-	//NEEDS to be defined first.
-	developmentTweaks = false;
+async function onReady() {
+	if (developmentTweaks === true)
+		console.log(Date());
 
 	Promise.all([
 		initializeListeners(),
@@ -20,10 +22,10 @@ async function onReady() {
 async function initializeListeners() {
 }
 
-/***
+/**
 * Swaps in the body of error pages returned from htmx requests 
 */
-document.addEventListener("htmx:beforeOnLoad", function (event) {
+document.addEventListener("htmx:beforeOnLoad", async function (event) {
 	// @ts-ignore
 	const xhr = event.detail.xhr
 	if (xhr.status == 500 || xhr.status == 403 || xhr.status == 404) {
@@ -48,7 +50,7 @@ document.addEventListener('htmx:historyRestore', async function (event) {
 * Initializes all select2 inputs.
 */
 async function initSelect2Inputs() {
-	document.querySelectorAll('select.select2').forEach(async (element) => {
+	document.querySelectorAll('select.select2').forEach(async function (element) {
 		let dropdownParent = jQuery(element).closest('[popover]');
 		if (dropdownParent.length === 0)
 			dropdownParent = document.body;
@@ -63,7 +65,7 @@ async function initSelect2Inputs() {
 * Destroys select2 inputs.
 */
 async function destroySelect2() {
-	document.querySelectorAll('select.select2').forEach(async (element) => {
+	document.querySelectorAll('select.select2').forEach(async function (element) {
 		jQuery(element).select2('destroy');
 	});
 }
