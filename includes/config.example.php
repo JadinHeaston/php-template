@@ -1,7 +1,7 @@
 <?php
 define('APP_ROOT', '/');
 define('DEBUG', false);
-define('DISABLE_ERROR_EMAILS', false);
+define('ERROR_ENABLE_DESTINATION', '');
 define('REQUIRE_JAVASCRIPT', false); //Setting to 'true' causes a full page pop up, preventing site usage, if JS is disabled.
 
 //Database
