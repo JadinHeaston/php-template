@@ -61,6 +61,7 @@ echo <<<HTML
 
 	<body>
 		{$jsDiv}
+		
 		<header>
 			Header Content!
 	HTML;
